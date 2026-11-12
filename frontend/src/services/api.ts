@@ -92,6 +92,35 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(payload),
     }),
+  uploadProfilePhoto: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<import("@/types").FarmerProfile>(
+      "/farmers/me/photo",
+      { method: "POST", body: form },
+      true
+    );
+  },
+
+  // Live GPS Location & Reverse Geocoding
+  reverseGeocode: (lat: number, lon: number) =>
+    request<import("@/types").ReverseGeocodeResult>(`/location/reverse?lat=${lat}&lon=${lon}`),
+  verifyLocation: (payload: {
+    latitude?: number | null;
+    longitude?: number | null;
+    gps_consent: boolean;
+    continuous_gps_opt_in: boolean;
+    state: string;
+    district: string;
+    taluk: string;
+    village: string;
+    location_address?: string | null;
+    location_source: "gps" | "gps_corrected" | "manual";
+  }) =>
+    request<import("@/types").FarmerProfile>("/location/verify", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 
   // Dashboard
   getDashboard: () => request<import("@/types").DashboardSummary>("/dashboard"),
@@ -149,6 +178,47 @@ export const api = {
     }),
   deleteTrackedCrop: (cropId: number) =>
     request<void>(`/crops/monitoring/${cropId}`, { method: "DELETE" }),
+  uploadCropPhoto: (cropId: number, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<import("@/types").TrackedCrop>(
+      `/crops/monitoring/${cropId}/photo`,
+      { method: "POST", body: form },
+      true
+    );
+  },
+
+  // Harvest Protection & Profit Optimization
+  getHarvestProtection: () =>
+    request<import("@/types").HarvestProtectionSummary>("/harvest/protection"),
+  analyzeHarvest: (payload: {
+    crop_name: string;
+    variety?: string;
+    sowing_date: string;
+    current_stage: string;
+    acreage: number;
+    irrigation_type: string;
+  }) =>
+    request<import("@/types").HarvestProtectionDecision>("/harvest/analyze", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  // Smart Notifications & Monitoring
+  getNotifications: (limit = 50) =>
+    request<import("@/types").NotificationList>(`/notifications?limit=${limit}`),
+  checkMonitoringNow: () =>
+    request<import("@/types").NotificationList>("/notifications/check-now", {
+      method: "POST",
+    }),
+  markNotificationRead: (notificationId: number) =>
+    request<import("@/types").NotificationItem>(`/notifications/${notificationId}/read`, {
+      method: "POST",
+    }),
+  markAllNotificationsRead: () =>
+    request<{ marked_read: number }>("/notifications/read-all", {
+      method: "POST",
+    }),
 
   // Pest & Disease Detection
   getDiseaseScans: () => request<import("@/types").DiseaseScan[]>("/pests/scans"),

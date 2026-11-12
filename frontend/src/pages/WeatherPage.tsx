@@ -89,10 +89,51 @@ export const WeatherPage: React.FC = () => {
         <EmptyState title="No weather data loaded" description="Select a state and district to inspect official sources." />
       ) : (
         <>
-          <div className="rm-card p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="rm-card p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="font-semibold text-deep">Location: {data.location_label}</span>
-            <span className="text-muted">Freshness: {data.freshness_label}</span>
+            {data.latitude != null && data.longitude != null && (
+              <span className="rounded-full bg-mint px-2.5 py-0.5 text-[11px] font-medium text-forest">
+                GPS {data.latitude.toFixed(4)}, {data.longitude.toFixed(4)}
+              </span>
+            )}
           </div>
+          <span className="text-muted">Freshness: {data.freshness_label}</span>
+        </div>
+
+        {/* Classified Alerts (Explicit separation: Official Flood vs Heavy Rain vs Waterlogging Estimate) */}
+        {data.classified_alerts && data.classified_alerts.length > 0 && (
+          <div className="space-y-2.5">
+            <h2 className="text-base font-bold text-deep">Classified Weather & Flood Risk Breakdown</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {data.classified_alerts.map((alert, idx) => {
+                const isOfficialFlood = alert.alert_type === "official_flood_warning";
+                const isHeavyRain = alert.alert_type === "heavy_rainfall_warning";
+                const tone = isOfficialFlood
+                  ? "border-danger/40 bg-[#FCECEC]"
+                  : isHeavyRain
+                  ? "border-warning/50 bg-[#FEF6E6]"
+                  : "border-[#176B35]/20 bg-mint/60";
+                return (
+                  <div key={idx} className={`rounded-2xl border p-4 space-y-1.5 ${tone}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-bold uppercase tracking-wide text-deep">
+                        {alert.alert_type.replace(/_/g, " ")}
+                      </span>
+                      <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-ink border border-black/10">
+                        {alert.is_official ? "Official Source" : "Forecast / Model"}
+                      </span>
+                    </div>
+                    <p className="text-sm font-bold text-ink">{alert.title_en}</p>
+                    <p className="text-xs text-ink/90">{alert.message_en}</p>
+                    <p className="text-xs font-medium text-deep">{alert.message_kn}</p>
+                    <p className="text-[11px] text-muted">Source: {alert.source}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
           {/* IMD Warnings + CWC Flood */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -205,8 +246,42 @@ export const WeatherPage: React.FC = () => {
             ) : (
               <EmptyState
                 title="Forecast feed not configured"
-                description="Add OPENWEATHER_API_KEY (or IMD credentials) in backend/.env to display live temperature and rainfall forecast charts."
+                description="Live weather forecast could not be loaded for this location right now."
               />
+            )}
+
+            {/* 7-Day Daily Rainfall & Intensity Cards */}
+            {data.daily_forecast && data.daily_forecast.length > 0 && (
+              <div className="pt-3 border-t border-[#176B35]/10 space-y-2.5">
+                <h3 className="text-sm font-bold text-deep">7-Day Rainfall, Wind & Intensity Outlook</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
+                  {data.daily_forecast.map((d) => {
+                    const heavy = d.rain_intensity === "heavy" || d.rain_intensity === "very_heavy";
+                    return (
+                      <div
+                        key={d.date}
+                        className={`rounded-xl border p-3 text-xs space-y-1 ${
+                          heavy
+                            ? "border-warning/60 bg-[#FEF6E6]"
+                            : "border-[#176B35]/15 bg-cream"
+                        }`}
+                      >
+                        <p className="font-bold text-deep">{d.date}</p>
+                        <p className="text-[11px] text-muted capitalize">{d.condition}</p>
+                        <p className="font-semibold text-ink">
+                          {d.temp_min_c}° – {d.temp_max_c}°C
+                        </p>
+                        <p className={`font-bold ${heavy ? "text-[#B27700]" : "text-forest"}`}>
+                          {d.rain_sum_mm} mm ({d.rain_probability_pct}%)
+                        </p>
+                        <p className="text-[10px] uppercase font-semibold text-muted">
+                          {d.rain_intensity.replace("_", " ")} • Wind {d.wind_max_kmh} km/h
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             )}
           </div>
         </>

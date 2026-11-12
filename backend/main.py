@@ -1,12 +1,13 @@
 """FastAPI application entry point for Raitha Mitra."""
 
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
-from database import Base, engine
+from database import Base, SessionLocal, engine
 import models  # noqa: F401
 from routers import (
     auth,
@@ -14,7 +15,11 @@ from routers import (
     dashboard,
     farmers,
     fertilizer,
+    files,
+    harvest,
+    location,
     mandi,
+    notifications,
     nutrition,
     pests,
     profit,
@@ -25,6 +30,7 @@ from routers import (
     weather,
     yield_prediction,
 )
+from services.monitoring_service import run_monitoring_all_farmers
 from utils.logging_utils import configure_logging
 
 
@@ -52,11 +58,30 @@ configure_logging(
 )
 
 
+async def _monitoring_worker() -> None:
+    while True:
+        await asyncio.sleep(max(300, settings.MONITORING_INTERVAL_SECONDS))
+        db = SessionLocal()
+        try:
+            await run_monitoring_all_farmers(db, trigger="scheduler")
+        except Exception:
+            pass
+        finally:
+            db.close()
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     if settings.APP_ENV == "development" or settings.DATABASE_URL.startswith("sqlite"):
         Base.metadata.create_all(bind=engine)
-    yield
+    task = None
+    if settings.MONITORING_SCHEDULER_ENABLED:
+        task = asyncio.create_task(_monitoring_worker())
+    try:
+        yield
+    finally:
+        if task:
+            task.cancel()
 
 
 app = FastAPI(
@@ -77,8 +102,12 @@ app.add_middleware(
 app.include_router(system.router)
 app.include_router(auth.router)
 app.include_router(farmers.router)
+app.include_router(files.router)
+app.include_router(location.router)
 app.include_router(dashboard.router)
 app.include_router(weather.router)
+app.include_router(harvest.router)
+app.include_router(notifications.router)
 app.include_router(soil.router)
 app.include_router(crops.router)
 app.include_router(pests.router)

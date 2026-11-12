@@ -359,10 +359,45 @@ export const VoiceAssistantPage: React.FC = () => {
                     {msg.interrupted ? " • Interrupted" : ""}
                   </p>
                   <p className="whitespace-pre-wrap">{msg.content}</p>
+                  {msg.role === "assistant" && typeof window !== "undefined" && "speechSynthesis" in window && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        stopAssistantAudioImmediately();
+                        const utter = new SpeechSynthesisUtterance(msg.content);
+                        utter.lang = msg.language_code || selectedLang;
+                        setSpeaking(true);
+                        utter.onend = () => setSpeaking(false);
+                        window.speechSynthesis.speak(utter);
+                      }}
+                      className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-forest hover:underline"
+                    >
+                      <Volume2 className="h-3 w-3" /> Speak in {msg.language_code}
+                    </button>
+                  )}
                 </div>
               </div>
             ))
           )}
+        </div>
+
+        <div className="flex flex-wrap gap-2 pt-1">
+          {[
+            { label: "ನಾಳೆ ಮಳೆಯಾಗುತ್ತದೆಯೇ? / Will it rain tomorrow?", text: selectedLang === "kn-IN" ? "ನಾಳೆ ಮಳೆಯಾಗುತ್ತದೆಯೇ?" : "Will it rain tomorrow?" },
+            { label: "ಪ್ರವಾಹ ಎಚ್ಚರಿಕೆ ಇದೆಯೇ? / Any flood warning?", text: selectedLang === "kn-IN" ? "ನನ್ನ ಪ್ರದೇಶದಲ್ಲಿ ಪ್ರವಾಹ ಎಚ್ಚರಿಕೆ ಇದೆಯೇ?" : "Is there a flood warning in my area?" },
+            { label: "ಇಂದು ಕೊಯ್ಲು ಮಾಡಬಹುದೇ? / Harvest today?", text: selectedLang === "kn-IN" ? "ನಾನು ಇಂದು ನನ್ನ ಬೆಳೆ ಕೊಯ್ಲು ಮಾಡಬೇಕೇ?" : "Should I harvest my crop today?" },
+            { label: "ಎಷ್ಟು ದಿನ ಬಾಕಿ ಇದೆ? / Days remaining?", text: selectedLang === "kn-IN" ? "ಕೊಯ್ಲಿಗೆ ಎಷ್ಟು ದಿನ ಬಾಕಿ ಇದೆ?" : "How many days are remaining before harvest?" },
+            { label: "ಮುನ್ನೆಚ್ಚರಿಕೆಗಳೇನು? / Precautions?", text: selectedLang === "kn-IN" ? "ಮಳೆಯಿಂದ ಬೆಳೆ ರಕ್ಷಣೆಗೆ ಮುನ್ನೆಚ್ಚರಿಕೆಗಳೇನು?" : "What precautions should I take before rain?" },
+          ].map((prompt) => (
+            <button
+              key={prompt.label}
+              type="button"
+              onClick={() => setTextInput(prompt.text)}
+              className="rounded-full border border-[#176B35]/20 bg-[#FAF9F2] hover:bg-mint px-3 py-1 text-[11px] font-medium text-deep transition"
+            >
+              {prompt.label}
+            </button>
+          ))}
         </div>
 
         <form onSubmit={handleSendText} className="flex gap-2 pt-2 border-t border-[#176B35]/10">

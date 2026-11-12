@@ -29,6 +29,7 @@ class TrackedCrop(Base):
     irrigation_type: Mapped[str] = mapped_column(String(40), nullable=False, default="rainfed")
     current_stage: Mapped[str] = mapped_column(String(60), nullable=False, default="germination")
     completed_tasks: Mapped[List[str]] = mapped_column(JSON, nullable=False, default=list)
+    photo_asset_ids: Mapped[List[str]] = mapped_column(JSON, nullable=False, default=list)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 

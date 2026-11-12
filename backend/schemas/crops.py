@@ -64,6 +64,12 @@ class TrackedCropUpdate(BaseModel):
     notes: Optional[str] = Field(default=None, max_length=500)
 
 
+class CropPhotoOut(BaseModel):
+    asset_id: str
+    url: str
+    original_filename: str = "crop-photo.jpg"
+
+
 class TrackedCropOut(BaseModel):
     id: int
     farmer_id: int
@@ -75,6 +81,7 @@ class TrackedCropOut(BaseModel):
     irrigation_type: str
     current_stage: str
     completed_tasks: List[str]
+    photos: List[CropPhotoOut] = Field(default_factory=list)
     status: str
     notes: Optional[str] = None
     days_since_sowing: int

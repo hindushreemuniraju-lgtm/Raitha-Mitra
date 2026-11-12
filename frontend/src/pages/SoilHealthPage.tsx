@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Upload, CheckCircle2, MapPin, TestTube2 } from "lucide-react";
+import { MediaPreview } from "@/components/common/MediaPreview";
 import {
   CardSkeleton,
   EmptyState,
@@ -21,6 +22,12 @@ export const SoilHealthPage: React.FC = () => {
   const [sourceType, setSourceType] = useState<"soil_health_card" | "lab_report">("soil_health_card");
   const [uploading, setUploading] = useState(false);
   const [pendingExtraction, setPendingExtraction] = useState<SoilUploadExtraction | null>(null);
+  const [instantPreview, setInstantPreview] = useState<{
+    url: string;
+    filename: string;
+    mimeType: string;
+    kind: "image" | "pdf";
+  } | null>(null);
 
   // Review form state
   const [ph, setPh] = useState("");
@@ -71,18 +78,30 @@ export const SoilHealthPage: React.FC = () => {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    const objectUrl = URL.createObjectURL(file);
+    setInstantPreview({
+      url: objectUrl,
+      filename: file.name,
+      mimeType: file.type || (isPdf ? "application/pdf" : "image/jpeg"),
+      kind: isPdf ? "pdf" : "image",
+    });
     setUploading(true);
     setError(null);
     setSuccess(null);
     try {
       const res = await api.uploadSoilReport(file, sourceType);
       setPendingExtraction(res);
+      if (res.record.file_url) {
+        setInstantPreview(null);
+      }
       populateReviewForm(res.record);
       loadRecords();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setUploading(false);
+      e.target.value = "";
     }
   };
 
@@ -189,6 +208,16 @@ export const SoilHealthPage: React.FC = () => {
               Missing parameters are never guessed—you will review every field before saving.
             </p>
           </label>
+
+          {instantPreview && (
+            <MediaPreview
+              url={instantPreview.url}
+              filename={instantPreview.filename}
+              mimeType={instantPreview.mimeType}
+              kind={instantPreview.kind}
+              aspectClass="h-44"
+            />
+          )}
         </div>
 
         {/* (b) Downloadable Dataset GPS Estimate */}
@@ -249,6 +278,16 @@ export const SoilHealthPage: React.FC = () => {
               Status: {pendingExtraction.ocr_status}
             </span>
           </div>
+
+          {pendingExtraction.record.file_url && (
+            <MediaPreview
+              url={pendingExtraction.record.file_url}
+              filename={pendingExtraction.record.original_filename}
+              mimeType={pendingExtraction.record.file_mime_type}
+              kind={pendingExtraction.record.file_kind}
+              aspectClass="h-52"
+            />
+          )}
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>
@@ -349,6 +388,17 @@ export const SoilHealthPage: React.FC = () => {
                       </button>
                     )}
                   </div>
+
+                  {rec.file_url && (
+                    <MediaPreview
+                      url={rec.file_url}
+                      filename={rec.original_filename}
+                      mimeType={rec.file_mime_type}
+                      kind={rec.file_kind}
+                      aspectClass="h-44"
+                      compact
+                    />
+                  )}
 
                   <div className="grid grid-cols-3 gap-2 text-xs">
                     <div className="rounded-xl bg-cream p-2">

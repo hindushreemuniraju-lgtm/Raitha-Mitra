@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from schemas.auth import LoginRequest, RegisterRequest, TokenResponse
 from services.auth_service import authenticate_farmer, register_farmer
+from services.farmer_service import serialize_farmer_profile
 from utils.rate_limit import rate_limit
 
 
@@ -20,7 +21,7 @@ router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 )
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     token, farmer = register_farmer(db, payload)
-    return TokenResponse(access_token=token, farmer=farmer)
+    return TokenResponse(access_token=token, farmer=serialize_farmer_profile(farmer))
 
 
 @router.post(
@@ -30,4 +31,4 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 )
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
     token, farmer = authenticate_farmer(db, payload)
-    return TokenResponse(access_token=token, farmer=farmer)
+    return TokenResponse(access_token=token, farmer=serialize_farmer_profile(farmer))

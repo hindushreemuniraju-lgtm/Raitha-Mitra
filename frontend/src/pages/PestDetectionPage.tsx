@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Bug, Camera, AlertTriangle } from "lucide-react";
+import { MediaPreview } from "@/components/common/MediaPreview";
 import {
   CardSkeleton,
   EmptyState,
@@ -16,6 +17,8 @@ export const PestDetectionPage: React.FC = () => {
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [latestScan, setLatestScan] = useState<DiseaseScan | null>(null);
+  const [instantPreviewUrl, setInstantPreviewUrl] = useState<string | null>(null);
+  const [instantFilename, setInstantFilename] = useState<string>("");
 
   const loadScans = () => {
     setLoading(true);
@@ -39,16 +42,22 @@ export const PestDetectionPage: React.FC = () => {
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setInstantPreviewUrl(URL.createObjectURL(file));
+    setInstantFilename(file.name);
     setAnalyzing(true);
     setError(null);
     try {
       const scan = await api.analyzeDiseaseImage(file, cropName.trim() || undefined);
       setLatestScan(scan);
       setScans((prev) => [scan, ...prev]);
+      if (scan.image_url) {
+        setInstantPreviewUrl(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to analyze crop image");
     } finally {
       setAnalyzing(false);
+      e.target.value = "";
     }
   };
 
@@ -87,6 +96,14 @@ export const PestDetectionPage: React.FC = () => {
             />
           </label>
         </div>
+        {instantPreviewUrl && (
+          <MediaPreview
+            url={instantPreviewUrl}
+            filename={instantFilename || "Leaf Upload Preview"}
+            kind="image"
+            aspectClass="h-48"
+          />
+        )}
       </div>
 
       {latestScan && (
@@ -109,6 +126,16 @@ export const PestDetectionPage: React.FC = () => {
               label={latestScan.status.replace("_", " ")}
             />
           </div>
+
+          {latestScan.image_url && (
+            <MediaPreview
+              url={latestScan.image_url}
+              filename={latestScan.original_filename || `${latestScan.crop_name || "Crop"} Leaf Photo`}
+              mimeType={latestScan.file_mime_type}
+              kind="image"
+              aspectClass="h-56"
+            />
+          )}
 
           {latestScan.status === "not_configured" && (
             <div className="rounded-xl border border-warning/40 bg-warning/10 p-4 text-xs text-[#6B4600] flex items-start gap-2.5">
@@ -195,27 +222,40 @@ export const PestDetectionPage: React.FC = () => {
             description="Upload a leaf photo above to inspect crop health."
           />
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {scans.map((s) => (
-              <button
+              <div
                 key={s.id}
-                type="button"
-                onClick={() => setLatestScan(s)}
-                className="rm-card p-4 text-left hover:border-forest/40 transition-colors"
+                className="rm-card p-4 space-y-3 hover:border-forest/40 transition-colors"
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-bold text-ink truncate">
-                    {s.diagnosis_name || s.status.replace("_", " ")}
-                  </span>
-                  <IntegrationStatusBadge
-                    status={s.status === "diagnosed" ? "configured" : "not_configured"}
-                    label={s.status}
+                {s.image_url && (
+                  <MediaPreview
+                    url={s.image_url}
+                    filename={s.original_filename || `${s.crop_name || "Leaf"} Scan`}
+                    mimeType={s.file_mime_type}
+                    kind="image"
+                    compact
                   />
-                </div>
-                <p className="text-xs text-muted mt-1">
-                  {s.crop_name || "Unknown crop"} • {s.adapter_used}
-                </p>
-              </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setLatestScan(s)}
+                  className="w-full text-left space-y-1"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-bold text-ink truncate">
+                      {s.diagnosis_name || s.status.replace("_", " ")}
+                    </span>
+                    <IntegrationStatusBadge
+                      status={s.status === "diagnosed" ? "configured" : "not_configured"}
+                      label={s.status}
+                    />
+                  </div>
+                  <p className="text-xs text-muted">
+                    {s.crop_name || "Unknown crop"} • {s.adapter_used} • Click for diagnosis details
+                  </p>
+                </button>
+              </div>
             ))}
           </div>
         )}

@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { MapPin, Save, Settings2 } from "lucide-react";
+import { Camera, Save, Settings2, Upload } from "lucide-react";
+import { FarmLocationPicker, type FarmLocationValue } from "@/components/common/FarmLocationPicker";
+import { MediaPreview } from "@/components/common/MediaPreview";
 import {
   CardSkeleton,
   ErrorState,
@@ -12,14 +14,23 @@ import { api } from "@/services/api";
 import type { IntegrationStatusItem, LanguageCode } from "@/types";
 
 export const ProfilePage: React.FC = () => {
-  const { farmer, updateProfile } = useAuth();
+  const { farmer, updateProfile, refreshProfile } = useAuth();
   const { setLanguage } = useLanguage();
 
   const [fullName, setFullName] = useState(farmer?.full_name || "");
   const [email, setEmail] = useState(farmer?.email || "");
-  const [stateName, setStateName] = useState(farmer?.state || "");
-  const [district, setDistrict] = useState(farmer?.district || "");
-  const [village, setVillage] = useState(farmer?.village || "");
+  const [location, setLocation] = useState<FarmLocationValue>({
+    state: farmer?.state || "",
+    district: farmer?.district || "",
+    taluk: farmer?.taluk || "",
+    village: farmer?.village || "",
+    location_address: farmer?.location_address || null,
+    latitude: farmer?.latitude ?? null,
+    longitude: farmer?.longitude ?? null,
+    gps_consent: Boolean(farmer?.gps_consent),
+    continuous_gps_opt_in: Boolean(farmer?.continuous_gps_opt_in),
+    location_source: (farmer?.location_source as "gps" | "gps_corrected" | "manual") || "manual",
+  });
   const [farmSize, setFarmSize] = useState(String(farmer?.farm_size_acres || 2));
   const [soilType, setSoilType] = useState(farmer?.soil_type || "");
   const [mainCrops, setMainCrops] = useState((farmer?.main_crops || []).join(", "));
@@ -27,13 +38,9 @@ export const ProfilePage: React.FC = () => {
     (farmer?.preferred_language as LanguageCode) || "kn-IN"
   );
   const [farmerCategory, setFarmerCategory] = useState(farmer?.farmer_category || "small");
-  const [gpsConsent, setGpsConsent] = useState(Boolean(farmer?.gps_consent));
-  const [latitude, setLatitude] = useState<string>(
-    farmer?.latitude !== null && farmer?.latitude !== undefined ? String(farmer.latitude) : ""
-  );
-  const [longitude, setLongitude] = useState<string>(
-    farmer?.longitude !== null && farmer?.longitude !== undefined ? String(farmer.longitude) : ""
-  );
+
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(farmer?.avatar_url || null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -45,6 +52,12 @@ export const ProfilePage: React.FC = () => {
   const [loadingIntegrations, setLoadingIntegrations] = useState(true);
 
   useEffect(() => {
+    if (farmer?.avatar_url) {
+      setAvatarPreviewUrl(farmer.avatar_url);
+    }
+  }, [farmer?.avatar_url]);
+
+  useEffect(() => {
     api
       .getIntegrationStatuses()
       .then((res) => setIntegrations(res.integrations))
@@ -52,12 +65,27 @@ export const ProfilePage: React.FC = () => {
       .finally(() => setLoadingIntegrations(false));
   }, []);
 
-  const handleGpsCapture = () => {
-    if (!gpsConsent || !navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition((pos) => {
-      setLatitude(pos.coords.latitude.toFixed(5));
-      setLongitude(pos.coords.longitude.toFixed(5));
-    });
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError(null);
+    setSaveMessage(null);
+    // Show instant local preview while persistent signed URL saves on server
+    const tempObjectUrl = URL.createObjectURL(file);
+    setAvatarPreviewUrl(tempObjectUrl);
+    setUploadingPhoto(true);
+    try {
+      const updated = await api.uploadProfilePhoto(file);
+      setAvatarPreviewUrl(updated.avatar_url || tempObjectUrl);
+      await refreshProfile();
+      setSaveMessage("Profile photograph uploaded and saved permanently.");
+    } catch (err) {
+      setAvatarPreviewUrl(farmer?.avatar_url || null);
+      setError(err instanceof Error ? err.message : "Failed to upload profile photo.");
+    } finally {
+      setUploadingPhoto(false);
+      e.target.value = "";
+    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -69,9 +97,12 @@ export const ProfilePage: React.FC = () => {
       const updated = await updateProfile({
         full_name: fullName,
         email: email.trim() || null,
-        state: stateName,
-        district,
-        village,
+        state: location.state,
+        district: location.district,
+        taluk: location.taluk,
+        village: location.village,
+        location_address: location.location_address || null,
+        location_source: location.gps_consent && location.latitude != null ? location.location_source : "manual",
         farm_size_acres: Number(farmSize) || 1,
         soil_type: soilType.trim() || null,
         main_crops: mainCrops
@@ -80,12 +111,25 @@ export const ProfilePage: React.FC = () => {
           .filter(Boolean),
         preferred_language: preferredLang,
         farmer_category: farmerCategory,
-        gps_consent: gpsConsent,
-        latitude: gpsConsent && latitude ? Number(latitude) : null,
-        longitude: gpsConsent && longitude ? Number(longitude) : null,
+        gps_consent: location.gps_consent,
+        continuous_gps_opt_in: location.gps_consent ? location.continuous_gps_opt_in : false,
+        latitude: location.gps_consent ? location.latitude : null,
+        longitude: location.gps_consent ? location.longitude : null,
+      });
+      await api.verifyLocation({
+        state: location.state,
+        district: location.district,
+        taluk: location.taluk,
+        village: location.village,
+        location_address: location.location_address || null,
+        location_source: location.gps_consent && location.latitude != null ? location.location_source : "manual",
+        gps_consent: location.gps_consent,
+        continuous_gps_opt_in: location.gps_consent ? location.continuous_gps_opt_in : false,
+        latitude: location.gps_consent ? location.latitude : null,
+        longitude: location.gps_consent ? location.longitude : null,
       });
       setLanguage((updated.preferred_language as LanguageCode) || "en-IN");
-      setSaveMessage("Farmer profile and preferences saved.");
+      setSaveMessage("Farmer profile, verified GPS location, and preferences saved.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save profile.");
     } finally {
@@ -96,16 +140,56 @@ export const ProfilePage: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-deep">Farmer Profile & Settings</h1>
+        <h1 className="text-2xl font-bold text-deep">Farmer Profile, Photo & Live GPS Location</h1>
         <p className="text-sm text-muted mt-1">
-          Manage your farm location, crops, preferred voice language, and inspect live API status.
+          Verify your farm GPS coordinates on the map, upload your profile photo, and configure language preferences.
         </p>
       </div>
 
       {saveMessage && <SuccessBanner message={saveMessage} />}
       {error && <ErrorState message={error} />}
 
-      <form onSubmit={handleSave} className="rm-card p-6 space-y-5">
+      {/* Farmer Profile Photograph Upload & Persistent Preview */}
+      <div className="rm-card p-6 grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+        <div className="md:col-span-2 space-y-2">
+          <div className="flex items-center gap-2 text-deep font-semibold text-sm">
+            <Camera className="h-4 w-4 text-forest" />
+            <span>Farmer Profile Photograph</span>
+          </div>
+          <p className="text-xs text-muted">
+            Upload your photo (JPG, PNG, WEBP up to 10 MB). Stored securely and remains visible across refreshes and sessions.
+          </p>
+          <label className="rm-btn-secondary inline-flex cursor-pointer text-xs mt-1">
+            <Upload className="h-3.5 w-3.5" />
+            {uploadingPhoto ? "Uploading Photo..." : "Upload Profile Photo"}
+            <input
+              type="file"
+              accept=".jpg,.jpeg,.png,.webp"
+              onChange={handleAvatarUpload}
+              disabled={uploadingPhoto}
+              className="hidden"
+            />
+          </label>
+        </div>
+
+        <div>
+          {avatarPreviewUrl ? (
+            <MediaPreview
+              url={avatarPreviewUrl}
+              filename={`${farmer?.full_name || "Farmer"} Photo`}
+              kind="image"
+              aspectClass="h-40"
+            />
+          ) : (
+            <div className="h-36 rounded-xl border border-dashed border-[#CFE4C8] bg-[#FAF9F2] flex flex-col items-center justify-center text-xs text-muted">
+              <Camera className="h-6 w-6 text-forest/50 mb-1" />
+              <span>No profile photo uploaded</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <form onSubmit={handleSave} className="rm-card p-6 space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-semibold mb-1.5">Full Name</label>
@@ -118,18 +202,6 @@ export const ProfilePage: React.FC = () => {
           <div>
             <label className="block text-xs font-semibold mb-1.5">Email</label>
             <input className="rm-input" value={email} onChange={(e) => setEmail(e.target.value)} />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold mb-1.5">State</label>
-            <input className="rm-input" value={stateName} onChange={(e) => setStateName(e.target.value)} required />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold mb-1.5">District</label>
-            <input className="rm-input" value={district} onChange={(e) => setDistrict(e.target.value)} />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold mb-1.5">Village</label>
-            <input className="rm-input" value={village} onChange={(e) => setVillage(e.target.value)} />
           </div>
           <div>
             <label className="block text-xs font-semibold mb-1.5">Farm Size (Acres)</label>
@@ -179,56 +251,12 @@ export const ProfilePage: React.FC = () => {
           </div>
         </div>
 
-        <div className="rm-surface p-4 space-y-3">
-          <label className="flex items-start gap-2.5 text-xs text-ink cursor-pointer">
-            <input
-              type="checkbox"
-              checked={gpsConsent}
-              onChange={(e) => {
-                setGpsConsent(e.target.checked);
-                if (!e.target.checked) {
-                  setLatitude("");
-                  setLongitude("");
-                }
-              }}
-              className="mt-0.5 rounded border-forest text-forest"
-            />
-            <span>
-              <strong>Opt-in GPS Location:</strong> Allow storing latitude/longitude for weather and
-              soil dataset lookups. Revoking clears saved GPS coordinates.
-            </span>
-          </label>
-          {gpsConsent && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-              <div>
-                <label className="block text-xs font-semibold mb-1">Latitude</label>
-                <input
-                  className="rm-input"
-                  value={latitude}
-                  onChange={(e) => setLatitude(e.target.value)}
-                  placeholder="e.g. 12.5223"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold mb-1">Longitude</label>
-                <input
-                  className="rm-input"
-                  value={longitude}
-                  onChange={(e) => setLongitude(e.target.value)}
-                  placeholder="e.g. 76.8975"
-                />
-              </div>
-              <button type="button" onClick={handleGpsCapture} className="rm-btn-secondary">
-                <MapPin className="h-4 w-4" />
-                Use Browser GPS
-              </button>
-            </div>
-          )}
-        </div>
+        {/* Interactive Live GPS Detection, Reverse Geocoding & Map Pin Override */}
+        <FarmLocationPicker value={location} onChange={setLocation} allowAuthReverse={true} />
 
         <button type="submit" disabled={saving} className="rm-btn-primary">
           <Save className="h-4 w-4" />
-          {saving ? "Saving..." : "Save Profile"}
+          {saving ? "Saving..." : "Save Profile & Verified Location"}
         </button>
       </form>
 
@@ -252,9 +280,7 @@ export const ProfilePage: React.FC = () => {
               </div>
             ))}
           </div>
-        ) : (
-          <ErrorState message="Could not load integration status." />
-        )}
+        ) : null}
       </div>
     </div>
   );

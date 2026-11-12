@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { CalendarCheck, Plus, Trash2, CheckSquare, Square } from "lucide-react";
+import { CalendarCheck, Camera, Plus, Trash2, CheckSquare, Square } from "lucide-react";
+import { MediaPreview } from "@/components/common/MediaPreview";
 import {
   CardSkeleton,
   EmptyState,
@@ -25,6 +26,8 @@ export const CropMonitoringPage: React.FC = () => {
   const [acreage, setAcreage] = useState("1.5");
   const [irrigationType, setIrrigationType] = useState("drip");
   const [adding, setAdding] = useState(false);
+  const [uploadingCropId, setUploadingCropId] = useState<number | null>(null);
+  const [instantCropPreviews, setInstantCropPreviews] = useState<Record<number, { url: string; name: string }>>({});
 
   const loadCrops = () => {
     setLoading(true);
@@ -92,6 +95,33 @@ export const CropMonitoringPage: React.FC = () => {
       setCrops((prev) => prev.filter((c) => c.id !== cropId));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete crop");
+    }
+  };
+
+  const handleCropPhotoUpload = async (cropId: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError(null);
+    setSuccess(null);
+    setInstantCropPreviews((prev) => ({
+      ...prev,
+      [cropId]: { url: URL.createObjectURL(file), name: file.name },
+    }));
+    setUploadingCropId(cropId);
+    try {
+      const updated = await api.uploadCropPhoto(cropId, file);
+      setCrops((prev) => prev.map((c) => (c.id === cropId ? updated : c)));
+      setInstantCropPreviews((prev) => {
+        const copy = { ...prev };
+        delete copy[cropId];
+        return copy;
+      });
+      setSuccess("Crop photograph uploaded and saved.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to upload crop photo");
+    } finally {
+      setUploadingCropId(null);
+      e.target.value = "";
     }
   };
 
@@ -214,6 +244,17 @@ export const CropMonitoringPage: React.FC = () => {
                       </option>
                     ))}
                   </select>
+                  <label className="rm-btn-secondary cursor-pointer text-xs !py-2 !px-3">
+                    <Camera className="h-3.5 w-3.5" />
+                    <span>{uploadingCropId === crop.id ? "Uploading..." : "Add Crop Photo"}</span>
+                    <input
+                      type="file"
+                      accept=".jpg,.jpeg,.png,.webp"
+                      onChange={(e) => void handleCropPhotoUpload(crop.id, e)}
+                      className="sr-only"
+                      disabled={uploadingCropId === crop.id}
+                    />
+                  </label>
                   <button
                     type="button"
                     onClick={() => void handleDelete(crop.id)}
@@ -224,6 +265,32 @@ export const CropMonitoringPage: React.FC = () => {
                   </button>
                 </div>
               </div>
+
+              {/* Persisted Crop Photographs & Immediate Upload Preview */}
+              {(instantCropPreviews[crop.id] || (crop.photos && crop.photos.length > 0)) && (
+                <div className="space-y-2">
+                  <p className="text-xs font-bold text-deep">Crop Field Photographs</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {instantCropPreviews[crop.id] && (
+                      <MediaPreview
+                        url={instantCropPreviews[crop.id].url}
+                        filename={instantCropPreviews[crop.id].name}
+                        kind="image"
+                        compact
+                      />
+                    )}
+                    {crop.photos?.map((photo) => (
+                      <MediaPreview
+                        key={photo.asset_id}
+                        url={photo.url}
+                        filename={photo.original_filename}
+                        kind="image"
+                        compact
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {crop.stage_guidance && (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

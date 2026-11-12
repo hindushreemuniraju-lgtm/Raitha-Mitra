@@ -10,6 +10,9 @@ class DiseaseScanOut(BaseModel):
     id: int
     farmer_id: int
     crop_name: Optional[str] = None
+    original_filename: Optional[str] = None
+    image_url: Optional[str] = None
+    file_mime_type: Optional[str] = None
     adapter_used: str
     confidence: Optional[float] = None
     status: str

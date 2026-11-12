@@ -23,6 +23,9 @@ class DiseaseScan(Base):
 
     crop_name: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
     stored_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    original_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    media_asset_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    file_mime_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     adapter_used: Mapped[str] = mapped_column(String(60), nullable=False)
     confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     # diagnosed | uncertain | not_configured

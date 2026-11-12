@@ -11,8 +11,12 @@ import {
   Landmark,
   AlertTriangle,
   TrendingUp,
+  Bell,
+  ShieldAlert,
+  MapPin,
 } from "lucide-react";
 import { AnimatedCounter } from "@/components/common/AnimatedCounter";
+import { MediaPreview } from "@/components/common/MediaPreview";
 import {
   CardSkeleton,
   EmptyState,
@@ -75,20 +79,32 @@ export const DashboardPage: React.FC = () => {
     <div className="space-y-6">
       {/* Greeting + Quick Actions */}
       <div className="rm-card p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-forest">
-            {data.farmer.village ? `${data.farmer.village}, ` : ""}
-            {data.farmer.district || data.farmer.state} • {data.farmer.farm_size_acres} Acres
-          </p>
-          <h1 className="text-2xl font-bold text-deep mt-1">
-            Namaste, {data.farmer.full_name}
-          </h1>
-          <p className="text-sm text-muted mt-1">
-            Main crops:{" "}
-            {data.farmer.main_crops.length > 0
-              ? data.farmer.main_crops.join(", ")
-              : "Not specified yet"}
-          </p>
+        <div className="flex items-start gap-4">
+          {data.farmer.avatar_url && (
+            <img
+              src={data.farmer.avatar_url}
+              alt={data.farmer.full_name}
+              className="h-14 w-14 rounded-2xl object-cover border border-forest/20 shrink-0"
+            />
+          )}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-forest flex items-center gap-1.5">
+              <MapPin className="h-3.5 w-3.5" />
+              {[data.farmer.village, data.farmer.taluk, data.farmer.district || data.farmer.state]
+                .filter(Boolean)
+                .join(", ")}{" "}
+              • {data.farmer.farm_size_acres} Acres
+            </p>
+            <h1 className="text-2xl font-bold text-deep mt-1">
+              Namaste, {data.farmer.full_name}
+            </h1>
+            <p className="text-sm text-muted mt-1">
+              Main crops:{" "}
+              {data.farmer.main_crops.length > 0
+                ? data.farmer.main_crops.join(", ")
+                : "Not specified yet"}
+            </p>
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -201,6 +217,63 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Harvest Protection & Active Alerts Highlight Row */}
+      {((data.harvest_protection?.decisions?.length || 0) > 0 || (data.unread_notifications_count || 0) > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {data.harvest_protection && data.harvest_protection.decisions.length > 0 && (
+            <div className="rm-card p-5 space-y-2.5 border-l-4 border-l-forest">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold text-deep flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 text-forest" />
+                  Harvest Protection Intelligence
+                </h2>
+                <Link to="/harvest" className="text-xs font-semibold text-forest hover:underline">
+                  Full Advisor →
+                </Link>
+              </div>
+              {data.harvest_protection.decisions.slice(0, 2).map((dec, idx) => (
+                <div key={dec.crop_id ?? idx} className="rounded-xl bg-[#FAF9F2] border border-[#176B35]/10 p-3 text-xs space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-deep">{dec.crop_name}</span>
+                    <span className="rounded-full bg-mint px-2.5 py-0.5 text-[10px] font-bold text-forest">
+                      {dec.action_label_en}
+                    </span>
+                  </div>
+                  <p className="text-ink">{dec.headline_en}</p>
+                  <p className="text-deep/85">{dec.headline_kn}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="rm-card p-5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-deep flex items-center gap-2">
+                <Bell className="h-4 w-4 text-forest" />
+                Smart Farm Alerts ({data.unread_notifications_count || 0} unread)
+              </h2>
+              <Link to="/notifications" className="text-xs font-semibold text-forest hover:underline">
+                Open Alert Center →
+              </Link>
+            </div>
+            {data.recent_notifications && data.recent_notifications.length > 0 ? (
+              <div className="space-y-2">
+                {data.recent_notifications.slice(0, 2).map((n) => (
+                  <div key={n.id} className="rounded-xl bg-cream border border-[#176B35]/10 p-3 text-xs space-y-0.5">
+                    <p className="font-bold text-deep">{n.title_kn}</p>
+                    <p className="text-muted">{n.title_en}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted">
+                Open the Alert Center to scan live rainfall, official flood warnings, and crop harvest windows for your farm GPS.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Middle Grid: Weather Warnings + Crop Stage + Pest Alerts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Alerts */}
@@ -279,7 +352,16 @@ export const DashboardPage: React.FC = () => {
           {data.recent_scans.length > 0 ? (
             <div className="space-y-2.5">
               {data.recent_scans.slice(0, 3).map((scan) => (
-                <div key={scan.id} className="rounded-xl bg-cream border border-[#176B35]/10 p-3">
+                <div key={scan.id} className="rounded-xl bg-cream border border-[#176B35]/10 p-3 space-y-2">
+                  {scan.image_url && (
+                    <MediaPreview
+                      url={scan.image_url}
+                      filename={scan.original_filename || `${scan.crop_name || "Leaf"} Scan`}
+                      mimeType={scan.file_mime_type}
+                      kind="image"
+                      compact
+                    />
+                  )}
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-semibold text-ink">
                       {scan.diagnosis_name || scan.status.replace("_", " ")}

@@ -13,8 +13,13 @@ from sqlalchemy.orm import Session
 from integrations.soil_dataset import SoilDatasetAdapter
 from models.farmer import Farmer
 from models.soil import SoilRecord
-from schemas.soil import SoilRecordReviewRequest
-from utils.file_storage import SOIL_ALLOWED_EXTENSIONS, save_validated_upload
+from schemas.soil import SoilRecordOut, SoilRecordReviewRequest
+from utils.file_storage import (
+    SOIL_ALLOWED_EXTENSIONS,
+    build_media_url,
+    persist_media_asset,
+    save_validated_upload,
+)
 
 
 _SOIL_FIELD_PATTERNS: Dict[str, re.Pattern[str]] = {
@@ -102,6 +107,15 @@ async def upload_and_extract_soil_report(
     safe_name, saved_path, raw_bytes = await save_validated_upload(
         file, subdir="soil_cards", allowed_extensions=SOIL_ALLOWED_EXTENSIONS
     )
+    orig_name = Path(file.filename or safe_name).name[:255]
+    asset = persist_media_asset(
+        db,
+        farmer_id=farmer.id,
+        category="soil_cards",
+        safe_filename=safe_name,
+        original_filename=orig_name,
+        content=raw_bytes,
+    )
     raw_text, ocr_status, ocr_note = _extract_text_from_file(saved_path, raw_bytes)
     parsed = parse_soil_text(raw_text)
 
@@ -122,8 +136,10 @@ async def upload_and_extract_soil_report(
         boron_ppm=parsed["boron_ppm"],
         iron_ppm=parsed["iron_ppm"],
         raw_ocr_text=raw_text or None,
-        original_filename=Path(file.filename or "report").name[:255],
+        original_filename=orig_name,
         stored_filename=safe_name,
+        media_asset_id=asset.id,
+        file_mime_type=asset.content_type,
         tested_at=datetime.now(timezone.utc),
     )
     db.add(record)
@@ -221,4 +237,44 @@ def list_farmer_soil_records(db: Session, farmer_id: int) -> list[SoilRecord]:
         .filter(SoilRecord.farmer_id == farmer_id)
         .order_by(SoilRecord.created_at.desc())
         .all()
+    )
+
+
+def serialize_soil_record(record: SoilRecord) -> SoilRecordOut:
+    """Serialize SoilRecord with clean signed file_url for image/PDF preview."""
+    mime = record.file_mime_type or (
+        "application/pdf"
+        if (record.original_filename or "").lower().endswith(".pdf")
+        else "image/png"
+        if (record.original_filename or "").lower().endswith(".png")
+        else "image/jpeg"
+        if record.media_asset_id
+        else None
+    )
+    kind = "pdf" if mime == "application/pdf" else ("image" if record.media_asset_id else None)
+    return SoilRecordOut(
+        id=record.id,
+        farmer_id=record.farmer_id,
+        source_type=record.source_type,
+        dataset_name=record.dataset_name,
+        confidence_level=record.confidence_level,
+        status=record.status,
+        ph=record.ph,
+        nitrogen_kg_ha=record.nitrogen_kg_ha,
+        phosphorus_kg_ha=record.phosphorus_kg_ha,
+        potassium_kg_ha=record.potassium_kg_ha,
+        organic_carbon_pct=record.organic_carbon_pct,
+        ec_ds_m=record.ec_ds_m,
+        sulphur_ppm=record.sulphur_ppm,
+        zinc_ppm=record.zinc_ppm,
+        boron_ppm=record.boron_ppm,
+        iron_ppm=record.iron_ppm,
+        raw_ocr_text=record.raw_ocr_text,
+        original_filename=record.original_filename,
+        file_url=build_media_url(record.media_asset_id, record.farmer_id),
+        file_kind=kind,
+        file_mime_type=mime,
+        review_notes=record.review_notes,
+        tested_at=record.tested_at,
+        created_at=record.created_at,
     )

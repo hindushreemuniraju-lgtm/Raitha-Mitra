@@ -25,6 +25,9 @@ class SoilRecordOut(BaseModel):
     iron_ppm: Optional[float] = None
     raw_ocr_text: Optional[str] = None
     original_filename: Optional[str] = None
+    file_url: Optional[str] = None
+    file_kind: Optional[str] = None
+    file_mime_type: Optional[str] = None
     review_notes: Optional[str] = None
     tested_at: Optional[datetime] = None
     created_at: Optional[datetime] = None

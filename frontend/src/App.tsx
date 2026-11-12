@@ -19,6 +19,8 @@ import { MandiPage } from "@/pages/MandiPage";
 import { ProfitCalculatorPage } from "@/pages/ProfitCalculatorPage";
 import { SchemesPage } from "@/pages/SchemesPage";
 import { ProfilePage } from "@/pages/ProfilePage";
+import { HarvestProtectionPage } from "@/pages/HarvestProtectionPage";
+import { NotificationsPage } from "@/pages/NotificationsPage";
 
 const ProtectedShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -59,6 +61,8 @@ export const App: React.FC = () => {
             <Route path="/mandi" element={<ProtectedShell><MandiPage /></ProtectedShell>} />
             <Route path="/profit" element={<ProtectedShell><ProfitCalculatorPage /></ProtectedShell>} />
             <Route path="/schemes" element={<ProtectedShell><SchemesPage /></ProtectedShell>} />
+            <Route path="/harvest" element={<ProtectedShell><HarvestProtectionPage /></ProtectedShell>} />
+            <Route path="/notifications" element={<ProtectedShell><NotificationsPage /></ProtectedShell>} />
             <Route path="/profile" element={<ProtectedShell><ProfilePage /></ProtectedShell>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

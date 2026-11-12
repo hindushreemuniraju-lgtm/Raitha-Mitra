@@ -7,10 +7,16 @@ export interface FarmerProfile {
   email?: string | null;
   state: string;
   district: string;
+  taluk?: string;
   village: string;
+  location_address?: string | null;
+  location_source?: "gps" | "gps_corrected" | "manual" | string;
   latitude?: number | null;
   longitude?: number | null;
   gps_consent: boolean;
+  continuous_gps_opt_in?: boolean;
+  location_updated_at?: string | null;
+  avatar_url?: string | null;
   farm_size_acres: number;
   soil_type?: string | null;
   main_crops: string[];
@@ -18,6 +24,19 @@ export interface FarmerProfile {
   farmer_category: string;
   created_at?: string | null;
   updated_at?: string | null;
+}
+
+export interface ReverseGeocodeResult {
+  status: "ok" | "unavailable" | string;
+  latitude: number;
+  longitude: number;
+  village: string;
+  taluk: string;
+  district: string;
+  state: string;
+  display_name: string;
+  source: string;
+  note?: string;
 }
 
 export interface TokenResponse {
@@ -52,9 +71,18 @@ export interface SoilRecord {
   iron_ppm?: number | null;
   raw_ocr_text?: string | null;
   original_filename?: string | null;
+  file_url?: string | null;
+  file_kind?: "image" | "pdf" | string | null;
+  file_mime_type?: string | null;
   review_notes?: string | null;
   tested_at?: string | null;
   created_at?: string | null;
+}
+
+export interface CropPhotoItem {
+  asset_id: string;
+  url: string;
+  original_filename: string;
 }
 
 export interface SoilUploadExtraction {
@@ -75,6 +103,7 @@ export interface TrackedCrop {
   irrigation_type: string;
   current_stage: string;
   completed_tasks: string[];
+  photos?: CropPhotoItem[];
   status: string;
   notes?: string | null;
   days_since_sowing: number;
@@ -116,8 +145,41 @@ export interface WeatherForecastPoint {
   temp_c: number;
   humidity_pct: number;
   rain_mm: number;
+  rain_probability_pct?: number;
   wind_kmh: number;
+  wind_gust_kmh?: number;
+  weather_code?: number;
   condition: string;
+}
+
+export interface DailyForecastPoint {
+  date: string;
+  temp_max_c: number;
+  temp_min_c: number;
+  rain_sum_mm: number;
+  rain_probability_pct: number;
+  precipitation_hours: number;
+  rain_intensity: "dry" | "light" | "moderate" | "heavy" | "very_heavy" | string;
+  wind_max_kmh: number;
+  wind_gust_max_kmh?: number;
+  weather_code?: number;
+  condition: string;
+}
+
+export interface ClassifiedAlert {
+  alert_type:
+    | "official_flood_warning"
+    | "heavy_rainfall_warning"
+    | "estimated_waterlogging_risk"
+    | "general_weather_advisory"
+    | string;
+  severity: "critical" | "high" | "medium" | "low" | string;
+  title_en: string;
+  title_kn: string;
+  message_en: string;
+  message_kn: string;
+  source: string;
+  is_official: boolean;
 }
 
 export interface WeatherWarning {
@@ -130,16 +192,22 @@ export interface WeatherWarning {
 
 export interface WeatherFloodResponse {
   location_label: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  location_source?: string;
   imd_status: "configured" | "not_configured" | "error";
   imd_source_note: string;
   forecast_status: "configured" | "not_configured" | "error";
   forecast_source: string;
   flood_status: "configured" | "not_configured" | "unavailable" | "error";
   flood_source_note: string;
+  ksndmc_status?: string;
+  ksndmc_source_note?: string;
   updated_at?: string | null;
   freshness_label: string;
   warnings: WeatherWarning[];
   forecast: WeatherForecastPoint[];
+  daily_forecast?: DailyForecastPoint[];
   flood_advisories: Array<{
     station: string;
     river: string;
@@ -149,12 +217,16 @@ export interface WeatherFloodResponse {
     source: string;
     updated_at?: string | null;
   }>;
+  classified_alerts?: ClassifiedAlert[];
 }
 
 export interface DiseaseScan {
   id: number;
   farmer_id: number;
   crop_name?: string | null;
+  original_filename?: string | null;
+  image_url?: string | null;
+  file_mime_type?: string | null;
   adapter_used: string;
   confidence?: number | null;
   status: "diagnosed" | "uncertain" | "not_configured";
@@ -366,12 +438,91 @@ export interface VoiceTurnResponse {
   messages: VoiceMessage[];
 }
 
+export interface HarvestProfitOptimization {
+  market_price_status: "configured" | "not_configured" | string;
+  current_modal_price_inr_qtl?: number | null;
+  market_name?: string | null;
+  price_date?: string | null;
+  spoilage_risk_level: "low" | "moderate" | "high" | string;
+  recommended_sell_strategy: string;
+  transport_timing_advice: string;
+  explanation_en: string;
+  explanation_kn: string;
+  honesty_note: string;
+}
+
+export interface HarvestProtectionDecision {
+  crop_id?: number | null;
+  crop_name: string;
+  variety?: string | null;
+  sowing_date: string;
+  crop_age_days: number;
+  current_stage: string;
+  expected_maturity_date: string;
+  days_remaining_to_maturity: number;
+  readiness_status: "immature" | "approaching_maturity" | "harvest_ready" | "overdue" | string;
+  action: "harvest_now" | "prepare_harvest" | "wait_for_maturity" | "delay_harvest" | "protect_crop" | string;
+  action_label_en: string;
+  action_label_kn: string;
+  rain_24h_mm: number;
+  rain_72h_mm: number;
+  max_rain_probability_pct: number;
+  max_wind_kmh: number;
+  location_label: string;
+  headline_en: string;
+  headline_kn: string;
+  explanation_en: string;
+  explanation_kn: string;
+  crop_specific_notes: string[];
+  precautions_en: string[];
+  precautions_kn: string[];
+  profit_optimization: HarvestProfitOptimization;
+}
+
+export interface HarvestProtectionSummary {
+  location_label: string;
+  weather_freshness: string;
+  decisions: HarvestProtectionDecision[];
+}
+
+export interface NotificationItem {
+  id: number;
+  farmer_id: number;
+  crop_id?: number | null;
+  category: string;
+  alert_type_label: string;
+  priority: "critical" | "high" | "medium" | "low" | string;
+  dedup_key: string;
+  title_en: string;
+  title_kn: string;
+  message_en: string;
+  message_kn: string;
+  crop_name?: string | null;
+  growth_stage?: string | null;
+  recommendation_en?: string | null;
+  recommendation_kn?: string | null;
+  source_name: string;
+  metadata_json: Record<string, unknown>;
+  is_read: boolean;
+  read_at?: string | null;
+  created_at: string;
+}
+
+export interface NotificationList {
+  unread_count: number;
+  total_count: number;
+  items: NotificationItem[];
+}
+
 export interface DashboardSummary {
   farmer: FarmerProfile;
   weather: WeatherFloodResponse;
   latest_soil?: SoilRecord | null;
   active_crops: TrackedCrop[];
   recent_scans: DiseaseScan[];
+  harvest_protection?: HarvestProtectionSummary | null;
+  unread_notifications_count?: number;
+  recent_notifications?: NotificationItem[];
   mandi_preview: MandiPriceRow[];
   yield_preview?: YieldPredictionResponse | null;
   latest_profit?: ProfitScenarioResult | null;

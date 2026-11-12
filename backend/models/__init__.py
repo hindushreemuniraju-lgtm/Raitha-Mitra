@@ -3,6 +3,8 @@
 from models.crop import TrackedCrop
 from models.disease import DiseaseScan
 from models.farmer import Farmer
+from models.media import MediaAsset
+from models.notification import MonitoringRunLog, Notification
 from models.profit import ProfitScenario
 from models.soil import SoilRecord
 from models.voice import VoiceMessage, VoiceSession
@@ -15,4 +17,7 @@ __all__ = [
     "ProfitScenario",
     "VoiceSession",
     "VoiceMessage",
+    "MediaAsset",
+    "Notification",
+    "MonitoringRunLog",
 ]

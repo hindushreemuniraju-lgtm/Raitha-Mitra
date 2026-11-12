@@ -17,6 +17,7 @@ from services.soil_service import (
     create_dataset_soil_estimate,
     list_farmer_soil_records,
     review_and_confirm_soil_record,
+    serialize_soil_record,
     upload_and_extract_soil_report,
 )
 from utils.rate_limit import rate_limit
@@ -31,7 +32,7 @@ def get_my_soil_records(
     current_farmer: Farmer = Depends(get_current_farmer),
     db: Session = Depends(get_db),
 ):
-    return list_farmer_soil_records(db, current_farmer.id)
+    return [serialize_soil_record(r) for r in list_farmer_soil_records(db, current_farmer.id)]
 
 
 @router.post(
@@ -50,7 +51,7 @@ async def upload_soil_report(
         db, current_farmer, file, source_type
     )
     return SoilUploadExtractionOut(
-        record=record,
+        record=serialize_soil_record(record),
         ocr_status=ocr_status,
         ocr_note=ocr_note,
         requires_review=True,
@@ -64,7 +65,7 @@ def confirm_soil_review(
     current_farmer: Farmer = Depends(get_current_farmer),
     db: Session = Depends(get_db),
 ):
-    return review_and_confirm_soil_record(db, current_farmer, record_id, payload)
+    return serialize_soil_record(review_and_confirm_soil_record(db, current_farmer, record_id, payload))
 
 
 @router.post("/estimate", response_model=SoilRecordOut, status_code=status.HTTP_201_CREATED)
@@ -73,10 +74,12 @@ def estimate_soil_by_gps(
     current_farmer: Farmer = Depends(get_current_farmer),
     db: Session = Depends(get_db),
 ):
-    return create_dataset_soil_estimate(
-        db,
-        current_farmer,
-        payload.latitude,
-        payload.longitude,
-        payload.dataset_preference,
+    return serialize_soil_record(
+        create_dataset_soil_estimate(
+            db,
+            current_farmer,
+            payload.latitude,
+            payload.longitude,
+            payload.dataset_preference,
+        )
     )

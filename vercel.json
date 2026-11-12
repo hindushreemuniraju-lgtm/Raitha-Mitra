@@ -15,5 +15,11 @@
   "rewrites": [
     { "source": "/api/(.*)", "destination": { "service": "backend" } },
     { "source": "/(.*)", "destination": { "service": "frontend" } }
+  ],
+  "crons": [
+    {
+      "path": "/api/v1/notifications/cron",
+      "schedule": "0 6 * * *"
+    }
   ]
 }

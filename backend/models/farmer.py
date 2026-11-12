@@ -26,10 +26,16 @@ class Farmer(Base):
 
     state: Mapped[str] = mapped_column(String(80), nullable=False, default="Karnataka")
     district: Mapped[str] = mapped_column(String(80), nullable=False, default="")
+    taluk: Mapped[str] = mapped_column(String(80), nullable=False, default="")
     village: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    location_address: Mapped[Optional[str]] = mapped_column(String(400), nullable=True)
+    location_source: Mapped[str] = mapped_column(String(24), nullable=False, default="manual")
     latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     gps_consent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    continuous_gps_opt_in: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    location_updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    avatar_asset_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
 
     farm_size_acres: Mapped[float] = mapped_column(Float, nullable=False, default=2.0)
     soil_type: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
@@ -45,3 +51,5 @@ class Farmer(Base):
     disease_scans = relationship("DiseaseScan", back_populates="farmer", cascade="all, delete-orphan")
     profit_scenarios = relationship("ProfitScenario", back_populates="farmer", cascade="all, delete-orphan")
     voice_sessions = relationship("VoiceSession", back_populates="farmer", cascade="all, delete-orphan")
+    media_assets = relationship("MediaAsset", back_populates="farmer", cascade="all, delete-orphan")
+    notifications = relationship("Notification", back_populates="farmer", cascade="all, delete-orphan")

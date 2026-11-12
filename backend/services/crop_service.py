@@ -1,14 +1,17 @@
 """Crop recommendation (including vegetables & fruits) and stage-wise monitoring service."""
 
 from datetime import date
+from pathlib import Path
 from typing import Dict, List, Optional
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from models.crop import TrackedCrop
 from models.farmer import Farmer
+from models.media import MediaAsset
 from schemas.crops import (
+    CropPhotoOut,
     CropRecommendItem,
     CropRecommendRequest,
     CropRecommendResponse,
@@ -18,6 +21,12 @@ from schemas.crops import (
     TrackedCropUpdate,
 )
 from services.soil_service import get_effective_soil_record
+from utils.file_storage import (
+    IMAGE_ALLOWED_EXTENSIONS,
+    build_media_url,
+    persist_media_asset,
+    save_validated_upload,
+)
 
 
 _CROP_CATALOG: List[Dict] = [
@@ -352,10 +361,30 @@ def compute_stage_from_days(days: int) -> str:
     return "maturity"
 
 
-def enrich_tracked_crop(crop: TrackedCrop) -> TrackedCropOut:
+def enrich_tracked_crop(crop: TrackedCrop, db: Optional[Session] = None) -> TrackedCropOut:
     days = max(0, (date.today() - crop.sowing_date).days)
     stage_key = crop.current_stage if crop.current_stage in _STAGE_GUIDANCE else compute_stage_from_days(days)
     g = _STAGE_GUIDANCE[stage_key]
+
+    asset_ids = [str(aid) for aid in (crop.photo_asset_ids or []) if aid]
+    filename_map: Dict[str, str] = {}
+    if db is not None and asset_ids:
+        rows = (
+            db.query(MediaAsset.id, MediaAsset.original_filename)
+            .filter(MediaAsset.id.in_(asset_ids), MediaAsset.farmer_id == crop.farmer_id)
+            .all()
+        )
+        filename_map = {str(r[0]): str(r[1]) for r in rows}
+
+    photos = [
+        CropPhotoOut(
+            asset_id=aid,
+            url=build_media_url(aid, crop.farmer_id) or "",
+            original_filename=filename_map.get(aid, "crop-photo.jpg"),
+        )
+        for aid in asset_ids
+    ]
+
     return TrackedCropOut(
         id=crop.id,
         farmer_id=crop.farmer_id,
@@ -367,6 +396,7 @@ def enrich_tracked_crop(crop: TrackedCrop) -> TrackedCropOut:
         irrigation_type=crop.irrigation_type,
         current_stage=stage_key,
         completed_tasks=list(crop.completed_tasks or []),
+        photos=photos,
         status=crop.status,
         notes=crop.notes,
         days_since_sowing=days,
@@ -387,13 +417,14 @@ def create_tracked_crop(db: Session, farmer: Farmer, payload: TrackedCropCreate)
         irrigation_type=payload.irrigation_type.strip(),
         current_stage=stage,
         completed_tasks=[],
+        photo_asset_ids=[],
         status="active",
         notes=payload.notes,
     )
     db.add(crop)
     db.commit()
     db.refresh(crop)
-    return enrich_tracked_crop(crop)
+    return enrich_tracked_crop(crop, db)
 
 
 def list_tracked_crops(db: Session, farmer_id: int) -> List[TrackedCropOut]:
@@ -403,7 +434,7 @@ def list_tracked_crops(db: Session, farmer_id: int) -> List[TrackedCropOut]:
         .order_by(TrackedCrop.created_at.desc())
         .all()
     )
-    return [enrich_tracked_crop(r) for r in rows]
+    return [enrich_tracked_crop(r, db) for r in rows]
 
 
 def update_tracked_crop(
@@ -421,7 +452,37 @@ def update_tracked_crop(
     db.add(crop)
     db.commit()
     db.refresh(crop)
-    return enrich_tracked_crop(crop)
+    return enrich_tracked_crop(crop, db)
+
+
+async def upload_tracked_crop_photo(
+    db: Session, farmer: Farmer, crop_id: int, file: UploadFile
+) -> TrackedCropOut:
+    crop = (
+        db.query(TrackedCrop)
+        .filter(TrackedCrop.id == crop_id, TrackedCrop.farmer_id == farmer.id)
+        .first()
+    )
+    if crop is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tracked crop not found.")
+
+    safe_name, _, raw_bytes = await save_validated_upload(
+        file, subdir="crop_photos", allowed_extensions=IMAGE_ALLOWED_EXTENSIONS
+    )
+    asset = persist_media_asset(
+        db,
+        farmer_id=farmer.id,
+        category="crop_photos",
+        safe_filename=safe_name,
+        original_filename=Path(file.filename or safe_name).name,
+        content=raw_bytes,
+    )
+    existing = list(crop.photo_asset_ids or [])
+    crop.photo_asset_ids = [asset.id, *existing]
+    db.add(crop)
+    db.commit()
+    db.refresh(crop)
+    return enrich_tracked_crop(crop, db)
 
 
 def delete_tracked_crop(db: Session, farmer_id: int, crop_id: int) -> None:

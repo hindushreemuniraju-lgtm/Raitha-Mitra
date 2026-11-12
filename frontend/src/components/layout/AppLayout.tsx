@@ -20,8 +20,12 @@ import {
   Menu,
   X,
   Globe,
+  Bell,
+  ShieldAlert,
+  MapPin,
 } from "lucide-react";
 import { BrandLogo } from "@/components/common/BrandLogo";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { useAuth } from "@/context/AuthContext";
 import { SUPPORTED_LANGUAGES, useLanguage } from "@/context/LanguageContext";
 import type { LanguageCode } from "@/types";
@@ -37,6 +41,8 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/dashboard", key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/voice", key: "voice", label: "Voice Assistant", icon: Mic },
   { to: "/weather", key: "weather", label: "Weather & Flood", icon: CloudRain },
+  { to: "/harvest", key: "harvest", label: "Harvest Protection", icon: ShieldAlert },
+  { to: "/notifications", key: "notifications", label: "Smart Alerts", icon: Bell },
   { to: "/soil", key: "soil", label: "Soil Health", icon: TestTube2 },
   { to: "/crops", key: "crops", label: "Crop Advice", icon: Sprout },
   { to: "/growth", key: "growth", label: "Crop Growth", icon: CalendarCheck },
@@ -93,12 +99,28 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
 
         <div className="p-4 border-t border-[#176B35]/10 space-y-3">
           {farmer && (
-            <div className="rounded-xl bg-mint/60 px-3 py-2.5">
-              <p className="text-xs font-semibold text-deep truncate">{farmer.full_name}</p>
-              <p className="text-[11px] text-muted truncate">
-                {farmer.village || farmer.district}, {farmer.state}
-              </p>
-            </div>
+            <Link
+              to="/profile"
+              className="flex items-center gap-2.5 rounded-xl bg-mint/60 hover:bg-mint px-3 py-2.5 transition"
+            >
+              {farmer.avatar_url ? (
+                <img
+                  src={farmer.avatar_url}
+                  alt={farmer.full_name}
+                  className="h-9 w-9 rounded-full object-cover border border-forest/20 shrink-0"
+                />
+              ) : (
+                <div className="h-9 w-9 rounded-full bg-forest text-white text-xs font-bold flex items-center justify-center shrink-0">
+                  {farmer.full_name.slice(0, 1).toUpperCase()}
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-deep truncate">{farmer.full_name}</p>
+                <p className="text-[11px] text-muted truncate">
+                  {[farmer.village, farmer.taluk, farmer.district].filter(Boolean).join(", ") || farmer.state}
+                </p>
+              </div>
+            </Link>
           )}
           <button
             onClick={logout}
@@ -125,12 +147,28 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
             <Link to="/dashboard" className="lg:hidden">
               <BrandLogo size="sm" />
             </Link>
-            <span className="hidden lg:inline text-xs font-medium text-muted">
-              {t("tagline", "Your Smart Farming Companion")}
-            </span>
+            <div className="hidden lg:flex items-center gap-3">
+              <span className="text-xs font-medium text-muted">
+                {t("tagline", "Your Smart Farming Companion")}
+              </span>
+              {farmer && (
+                <Link
+                  to="/profile"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-mint/70 hover:bg-mint px-3 py-1 text-[11px] font-semibold text-deep transition"
+                  title="Update or refresh farm GPS location"
+                >
+                  <MapPin className="h-3.5 w-3.5 text-forest" />
+                  <span>
+                    {[farmer.village, farmer.taluk, farmer.district, farmer.state].filter(Boolean).join(", ")}
+                    {farmer.latitude != null ? " (GPS)" : ""}
+                  </span>
+                </Link>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-2.5">
+            <NotificationBell preferredLanguage={farmer?.preferred_language || language} />
             <div className="inline-flex items-center gap-1.5 rounded-xl border border-[#176B35]/20 bg-cream px-2.5 py-1.5">
               <Globe className="h-3.5 w-3.5 text-forest" />
               <select

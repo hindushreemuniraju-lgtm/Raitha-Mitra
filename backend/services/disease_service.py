@@ -1,5 +1,6 @@
 """Pest and disease diagnosis orchestration (Plantix primary + pluggable fallback)."""
 
+from pathlib import Path
 from typing import List, Optional
 
 from fastapi import UploadFile
@@ -9,7 +10,35 @@ from integrations.disease_vision_fallback import DiseaseVisionFallbackAdapter
 from integrations.plantix import PlantixAdapter
 from models.disease import DiseaseScan
 from models.farmer import Farmer
-from utils.file_storage import IMAGE_ALLOWED_EXTENSIONS, save_validated_upload
+from schemas.disease import DiseaseScanOut
+from utils.file_storage import (
+    IMAGE_ALLOWED_EXTENSIONS,
+    build_media_url,
+    persist_media_asset,
+    save_validated_upload,
+)
+
+
+def serialize_disease_scan(scan: DiseaseScan) -> DiseaseScanOut:
+    """Serialize DiseaseScan including signed preview image URL."""
+    return DiseaseScanOut(
+        id=scan.id,
+        farmer_id=scan.farmer_id,
+        crop_name=scan.crop_name,
+        original_filename=scan.original_filename or scan.stored_filename,
+        image_url=build_media_url(scan.media_asset_id, scan.farmer_id),
+        file_mime_type=scan.file_mime_type,
+        adapter_used=scan.adapter_used,
+        confidence=scan.confidence,
+        status=scan.status,
+        diagnosis_name=scan.diagnosis_name,
+        symptoms=list(scan.symptoms or []),
+        organic_treatments=list(scan.organic_treatments or []),
+        chemical_treatments=list(scan.chemical_treatments or []),
+        precautions=list(scan.precautions or []),
+        raw_summary=scan.raw_summary,
+        created_at=scan.created_at,
+    )
 
 
 async def analyze_crop_disease_image(
@@ -17,9 +46,18 @@ async def analyze_crop_disease_image(
     farmer: Farmer,
     file: UploadFile,
     crop_name: Optional[str] = None,
-) -> DiseaseScan:
-    safe_name, saved_path, _ = await save_validated_upload(
+) -> DiseaseScanOut:
+    safe_name, saved_path, raw_bytes = await save_validated_upload(
         file, subdir="leaf_images", allowed_extensions=IMAGE_ALLOWED_EXTENSIONS
+    )
+    orig_name = Path(file.filename or safe_name).name[:255]
+    asset = persist_media_asset(
+        db,
+        farmer_id=farmer.id,
+        category="leaf_images",
+        safe_filename=safe_name,
+        original_filename=orig_name,
+        content=raw_bytes,
     )
 
     plantix = PlantixAdapter()
@@ -54,6 +92,9 @@ async def analyze_crop_disease_image(
         farmer_id=farmer.id,
         crop_name=crop_name.strip() if crop_name else None,
         stored_filename=safe_name,
+        original_filename=orig_name,
+        media_asset_id=asset.id,
+        file_mime_type=asset.content_type,
         adapter_used=str(result.get("adapter", "unknown")),
         confidence=result.get("confidence"),
         status=str(result.get("status", "not_configured")),
@@ -67,13 +108,14 @@ async def analyze_crop_disease_image(
     db.add(scan)
     db.commit()
     db.refresh(scan)
-    return scan
+    return serialize_disease_scan(scan)
 
 
-def list_disease_scans(db: Session, farmer_id: int) -> List[DiseaseScan]:
-    return (
+def list_disease_scans(db: Session, farmer_id: int) -> List[DiseaseScanOut]:
+    rows = (
         db.query(DiseaseScan)
         .filter(DiseaseScan.farmer_id == farmer_id)
         .order_by(DiseaseScan.created_at.desc())
         .all()
     )
+    return [serialize_disease_scan(r) for r in rows]

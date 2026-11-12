@@ -42,6 +42,8 @@ class SoilRecord(Base):
     raw_ocr_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     original_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     stored_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    media_asset_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    file_mime_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     review_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     tested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

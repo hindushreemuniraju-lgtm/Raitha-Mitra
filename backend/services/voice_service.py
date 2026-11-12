@@ -14,7 +14,35 @@ from models.voice import VoiceMessage, VoiceSession
 from schemas.voice import VoiceTokenOut, VoiceTurnOut
 from services.crop_service import list_tracked_crops
 from services.disease_service import list_disease_scans
+from services.harvest_protection_service import get_farmer_harvest_protection
+from services.monitoring_service import list_farmer_notifications
 from services.soil_service import get_effective_soil_record
+from services.weather_service import get_weather_and_flood_summary
+
+
+_WEATHER_FLOOD_HARVEST_KEYWORDS = (
+    "rain",
+    "weather",
+    "forecast",
+    "flood",
+    "waterlog",
+    "harvest",
+    "mature",
+    "maturity",
+    "days left",
+    "days remaining",
+    "precaution",
+    "alert",
+    "notification",
+    "ಮಳೆ",
+    "ಹವಾಮಾನ",
+    "ಪ್ರವಾಹ",
+    "ಕೊಯ್ಲು",
+    "ಎಚ್ಚರಿಕೆ",
+    "ಮುನ್ನೆಚ್ಚರಿಕೆ",
+    "ಬೆಳೆ",
+    "ದಿನ",
+)
 
 
 _DISEASE_KEYWORDS = (
@@ -58,8 +86,15 @@ _NOT_CONFIGURED_REPLIES: Dict[str, str] = {
 }
 
 
-def build_farmer_voice_context(db: Session, farmer: Farmer) -> Dict[str, Any]:
-    """Gather grounded real farmer context (profile, soil, active crops, recent scans)."""
+def build_farmer_voice_context(
+    db: Session,
+    farmer: Farmer,
+    *,
+    weather_snapshot: Optional[Dict[str, Any]] = None,
+    harvest_decisions: Optional[List[Dict[str, Any]]] = None,
+    unread_alerts: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """Gather grounded real farmer context (profile, GPS, soil, crops, scans, live weather & harvest decisions)."""
     soil = get_effective_soil_record(db, farmer.id)
     crops = list_tracked_crops(db, farmer.id)
     scans = list_disease_scans(db, farmer.id)
@@ -82,7 +117,12 @@ def build_farmer_voice_context(db: Session, farmer: Farmer) -> Dict[str, Any]:
         "location": {
             "state": farmer.state,
             "district": farmer.district,
+            "taluk": farmer.taluk or "",
             "village": farmer.village,
+            "address": farmer.location_address,
+            "latitude": farmer.latitude,
+            "longitude": farmer.longitude,
+            "source": farmer.location_source or "manual",
         },
         "farm_size_acres": farmer.farm_size_acres,
         "soil_type": farmer.soil_type,
@@ -108,7 +148,155 @@ def build_farmer_voice_context(db: Session, farmer: Farmer) -> Dict[str, Any]:
             }
             for s in scans[:3]
         ],
+        "live_weather": weather_snapshot,
+        "harvest_protection": harvest_decisions or [],
+        "active_alerts": unread_alerts or [],
     }
+
+
+async def build_enriched_voice_context(db: Session, farmer: Farmer) -> Dict[str, Any]:
+    """Build voice context enriched with live weather forecast, official flood status, and harvest protection."""
+    weather_ctx: Optional[Dict[str, Any]] = None
+    harvest_ctx: List[Dict[str, Any]] = []
+    try:
+        weather = await get_weather_and_flood_summary(farmer)
+        tomorrow = weather.daily_forecast[1] if len(weather.daily_forecast) > 1 else (weather.daily_forecast[0] if weather.daily_forecast else None)
+        today_day = weather.daily_forecast[0] if weather.daily_forecast else None
+        weather_ctx = {
+            "location_label": weather.location_label,
+            "forecast_status": weather.forecast_status,
+            "forecast_source": weather.forecast_source,
+            "flood_status": weather.flood_status,
+            "imd_status": weather.imd_status,
+            "ksndmc_status": weather.ksndmc_status,
+            "today_rain_mm": today_day.rain_sum_mm if today_day else None,
+            "today_rain_prob_pct": today_day.rain_probability_pct if today_day else None,
+            "tomorrow_rain_mm": tomorrow.rain_sum_mm if tomorrow else None,
+            "tomorrow_rain_prob_pct": tomorrow.rain_probability_pct if tomorrow else None,
+            "tomorrow_intensity": tomorrow.rain_intensity if tomorrow else None,
+            "classified_alerts": [
+                {
+                    "type": a.alert_type,
+                    "severity": a.severity,
+                    "title_en": a.title_en,
+                    "title_kn": a.title_kn,
+                    "message_en": a.message_en,
+                    "message_kn": a.message_kn,
+                    "is_official": a.is_official,
+                }
+                for a in weather.classified_alerts
+            ],
+        }
+        hp = await get_farmer_harvest_protection(db, farmer, weather_override=weather)
+        harvest_ctx = [
+            {
+                "crop_name": d.crop_name,
+                "stage": d.current_stage,
+                "readiness": d.readiness_status,
+                "days_remaining": d.days_remaining_to_maturity,
+                "action": d.action,
+                "headline_en": d.headline_en,
+                "headline_kn": d.headline_kn,
+                "explanation_en": d.explanation_en,
+                "explanation_kn": d.explanation_kn,
+                "precautions_en": d.precautions_en,
+                "precautions_kn": d.precautions_kn,
+            }
+            for d in hp.decisions
+        ]
+    except Exception:
+        weather_ctx = None
+
+    notif_list = list_farmer_notifications(db, farmer.id, limit=6)
+    alerts_ctx = [
+        {
+            "category": n.category,
+            "priority": n.priority,
+            "title_en": n.title_en,
+            "title_kn": n.title_kn,
+            "message_en": n.message_en,
+            "message_kn": n.message_kn,
+            "is_read": n.is_read,
+        }
+        for n in notif_list.items
+    ]
+    return build_farmer_voice_context(
+        db,
+        farmer,
+        weather_snapshot=weather_ctx,
+        harvest_decisions=harvest_ctx,
+        unread_alerts=alerts_ctx,
+    )
+
+
+def _format_grounded_weather_harvest_reply(text: str, language_code: str, context: Dict[str, Any]) -> Optional[str]:
+    """Generate truthful grounded reply from verified live weather, flood status, and harvest protection data."""
+    lowered = text.lower()
+    if not any(k in lowered for k in _WEATHER_FLOOD_HARVEST_KEYWORDS):
+        return None
+
+    w = context.get("live_weather") or {}
+    loc = w.get("location_label") or f"{context['location'].get('village')}, {context['location'].get('district')}"
+    is_kn = language_code == "kn-IN"
+    decisions = context.get("harvest_protection") or []
+    alerts = w.get("classified_alerts") or []
+
+    asks_flood = any(k in lowered for k in ("flood", "waterlog", "ಪ್ರವಾಹ", "ನೀರು"))
+    asks_harvest = any(k in lowered for k in ("harvest", "mature", "days", "tomato", "paddy", "precaution", "ಕೊಯ್ಲು", "ದಿನ", "ಮುನ್ನೆಚ್ಚರಿಕೆ", "ಬೆಳೆ"))
+
+    parts: List[str] = []
+
+    if asks_flood:
+        official = [a for a in alerts if a.get("type") == "official_flood_warning"]
+        waterlog = [a for a in alerts if a.get("type") == "estimated_waterlogging_risk"]
+        if official:
+            parts.append(official[0]["message_kn"] if is_kn else official[0]["message_en"])
+        else:
+            if is_kn:
+                parts.append(
+                    f"{loc} ಪ್ರದೇಶಕ್ಕೆ CWC/KSNDMC/IMD ಕಡೆಯಿಂದ ಯಾವುದೇ ಅಧಿಕೃತ ಪ್ರವಾಹ ಎಚ್ಚರಿಕೆ ದಾಖಲಾಗಿಲ್ಲ (ಸ್ಥಿತಿ: {w.get('flood_status', 'unavailable')})."
+                )
+            else:
+                parts.append(
+                    f"No official CWC/KSNDMC/IMD flood warning is currently active for {loc} (official feed status: {w.get('flood_status', 'unavailable')})."
+                )
+            if waterlog:
+                parts.append(waterlog[0]["message_kn"] if is_kn else waterlog[0]["message_en"])
+
+    if not asks_flood or any(k in lowered for k in ("rain", "weather", "ಮಳೆ", "ಹವಾಮಾನ")):
+        t_mm = w.get("tomorrow_rain_mm")
+        t_prob = w.get("tomorrow_rain_prob_pct")
+        if t_mm is not None:
+            if is_kn:
+                parts.append(
+                    f"{loc} ಹವಾಮಾನ ಮುನ್ಸೂಚನೆ ({w.get('forecast_source', 'Open-Meteo')}): ನಾಳೆ ~{t_mm} ಮಿ.ಮೀ ಮಳೆ ({t_prob}% ಸಂಭವನೀಯತೆ) ನಿರೀಕ್ಷಿಸಲಾಗಿದೆ."
+                )
+            else:
+                parts.append(
+                    f"Live forecast for {loc} ({w.get('forecast_source', 'Open-Meteo')}): tomorrow expects ~{t_mm} mm rain ({t_prob}% probability)."
+                )
+        else:
+            parts.append(
+                f"{loc} ಹವಾಮಾನ ಮುನ್ಸೂಚನೆ ಲಭ್ಯವಿಲ್ಲ." if is_kn else f"Live forecast telemetry is currently unavailable for {loc}."
+            )
+
+    if asks_harvest:
+        if decisions:
+            for d in decisions[:2]:
+                rem = d.get("days_remaining", 0)
+                exp = d.get("explanation_kn") if is_kn else d.get("explanation_en")
+                precs = (d.get("precautions_kn") if is_kn else d.get("precautions_en")) or []
+                prec_line = f" ಮುನ್ನೆಚ್ಚರಿಕೆ: {'; '.join(precs[:2])}" if is_kn and precs else (f" Precautions: {'; '.join(precs[:2])}" if precs else "")
+                days_line = f" (ಪಕ್ವತೆಗೆ {rem} ದಿನ ಬಾಕಿ)" if is_kn and rem > 0 else (f" ({rem} days remaining to maturity)" if rem > 0 else "")
+                parts.append(f"{d['crop_name']}{days_line}: {exp}{prec_line}")
+        else:
+            parts.append(
+                "ನೀವು ಇನ್ನೂ ಸಕ್ರಿಯ ಬೆಳೆಗಳನ್ನು ಸೇರಿಸಿಲ್ಲ. ಬೆಳೆ ಮೇಲ್ವಿಚಾರಣೆ ಪುಟದಲ್ಲಿ ನಿಮ್ಮ ಬೆಳೆ ಮತ್ತು ಬಿತ್ತನೆ ದಿನಾಂಕ ಸೇರಿಸಿ."
+                if is_kn
+                else "You have no active tracked crops yet. Add your crop and sowing date in Crop Monitoring for stage-specific harvest advice."
+            )
+
+    return " ".join(parts).strip() if parts else None
 
 
 def _build_system_prompt(language_code: str, context: Dict[str, Any]) -> str:
@@ -208,7 +396,7 @@ async def process_voice_turn(
     interrupted_previous: bool = False,
 ) -> VoiceTurnOut:
     session = _get_or_create_session(db, farmer, language_code, session_id, channel="hybrid")
-    context = build_farmer_voice_context(db, farmer)
+    context = await build_enriched_voice_context(db, farmer)
 
     if interrupted_previous:
         last_assistant = (
@@ -256,7 +444,8 @@ async def process_voice_turn(
             audio_mime = tts.get("audio_mime")
     elif not sarvam.is_configured:
         sarvam_status = "not_configured"
-        reply_text = _NOT_CONFIGURED_REPLIES.get(language_code, _NOT_CONFIGURED_REPLIES["en-IN"])
+        grounded_reply = _format_grounded_weather_harvest_reply(text, language_code, context)
+        reply_text = grounded_reply or _NOT_CONFIGURED_REPLIES.get(language_code, _NOT_CONFIGURED_REPLIES["en-IN"])
     else:
         sarvam_status = "configured"
         prior_rows = (

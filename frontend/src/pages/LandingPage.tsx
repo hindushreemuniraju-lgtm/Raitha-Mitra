@@ -244,11 +244,16 @@ export const LandingPage: React.FC = () => {
       {/* Footer */}
       <footer className="bg-deep text-white/90 py-8 px-4 sm:px-6 lg:px-8 mt-auto">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
-          <div>
-            <p className="font-bold text-sm text-white">Raitha Mitra — Your Smart Farming Companion</p>
-            <p className="text-white/70 mt-1">
-              Data sources and external integrations are explicitly attributed and never fabricated.
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-white px-2.5 py-1.5">
+              <BrandLogo size="sm" />
+            </div>
+            <div>
+              <p className="font-bold text-sm text-white">Raitha Mitra — Your Smart Farming Companion</p>
+              <p className="text-white/70 mt-1">
+                Data sources and external integrations are explicitly attributed and never fabricated.
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-4">
             <Link to="/auth" className="hover:text-white underline">

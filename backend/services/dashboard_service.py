@@ -7,10 +7,13 @@ from models.farmer import Farmer
 from schemas.yield_prediction import YieldPredictRequest
 from services.crop_service import list_tracked_crops
 from services.disease_service import list_disease_scans
+from services.farmer_service import serialize_farmer_profile
+from services.harvest_protection_service import get_farmer_harvest_protection
 from services.mandi_service import get_mandi_prices_report
+from services.monitoring_service import list_farmer_notifications
 from services.profit_service import list_farmer_profit_scenarios
 from services.schemes_service import get_filtered_schemes
-from services.soil_service import get_effective_soil_record
+from services.soil_service import get_effective_soil_record, serialize_soil_record
 from services.weather_service import get_weather_and_flood_summary
 from services.yield_service import predict_yield_and_harvest
 
@@ -18,11 +21,14 @@ from services.yield_service import predict_yield_and_harvest
 async def build_dashboard_summary(db: Session, farmer: Farmer) -> dict:
     settings = get_settings()
     weather = await get_weather_and_flood_summary(farmer)
-    latest_soil = get_effective_soil_record(db, farmer.id)
+    latest_soil_orm = get_effective_soil_record(db, farmer.id)
+    latest_soil = serialize_soil_record(latest_soil_orm) if latest_soil_orm else None
     active_crops = list_tracked_crops(db, farmer.id)
     recent_scans = list_disease_scans(db, farmer.id)[:5]
     profit_list = list_farmer_profit_scenarios(db, farmer.id)
     latest_profit = profit_list[0] if profit_list else None
+    harvest_protection = await get_farmer_harvest_protection(db, farmer, weather_override=weather)
+    notifications = list_farmer_notifications(db, farmer.id, limit=8)
 
     mandi = await get_mandi_prices_report(
         commodity=farmer.main_crops[0] if farmer.main_crops else None,
@@ -53,11 +59,14 @@ async def build_dashboard_summary(db: Session, farmer: Farmer) -> dict:
     )
 
     return {
-        "farmer": farmer,
+        "farmer": serialize_farmer_profile(farmer),
         "weather": weather,
         "latest_soil": latest_soil,
         "active_crops": active_crops,
         "recent_scans": recent_scans,
+        "harvest_protection": harvest_protection,
+        "unread_notifications_count": notifications.unread_count,
+        "recent_notifications": notifications.items[:5],
         "mandi_preview": mandi.records[:5],
         "yield_preview": yield_preview,
         "latest_profit": latest_profit,

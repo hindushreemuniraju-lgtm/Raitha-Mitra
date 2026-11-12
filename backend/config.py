@@ -91,6 +91,14 @@ class Settings(BaseSettings):
     FERTILIZER_PRICE_API_URL: str = ""
     FERTILIZER_PRICE_API_KEY: str = ""
 
+    # Live Geocoding, Karnataka Disaster Management & Scheduled Monitoring
+    NOMINATIM_USER_AGENT: str = "RaithaMitra/1.0 (contact@raithamitra.app)"
+    KSNDMC_FLOOD_API_URL: str = ""
+    KSNDMC_API_KEY: str = ""
+    MONITORING_SCHEDULER_ENABLED: bool = False
+    MONITORING_INTERVAL_SECONDS: int = 1800
+    CRON_SECRET: str = ""
+
     @property
     def cors_origin_list(self) -> List[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
@@ -203,6 +211,24 @@ class Settings(BaseSettings):
                 "configured": bool(self.FERTILIZER_PRICE_API_URL),
                 "status": "configured" if self.FERTILIZER_PRICE_API_URL else "not_configured",
                 "note": "Prices shown only when verified source and date are available.",
+            },
+            "openmeteo": {
+                "name": "Open-Meteo Weather Forecast",
+                "configured": True,
+                "status": "configured",
+                "note": "Real-time hourly/daily rainfall, intensity, wind, and temperature forecasts by farm GPS coordinates.",
+            },
+            "nominatim_geocoding": {
+                "name": "OpenStreetMap Nominatim Geocoding",
+                "configured": True,
+                "status": "configured",
+                "note": "Reverse-geocodes device GPS coordinates into village, taluk, district, and state.",
+            },
+            "ksndmc_flood": {
+                "name": "Karnataka KSNDMC Disaster Feed",
+                "configured": bool(self.KSNDMC_FLOOD_API_URL),
+                "status": "configured" if self.KSNDMC_FLOOD_API_URL else "not_configured",
+                "note": "Official ksndmc.karnataka.gov.in feed URL optional; without institutional feed, estimated waterlogging risks are labelled clearly.",
             },
         }
 

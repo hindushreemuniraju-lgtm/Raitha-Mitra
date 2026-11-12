@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { MapPin, Shield, Sprout } from "lucide-react";
+import { Shield, Sprout } from "lucide-react";
 import { BrandLogo } from "@/components/common/BrandLogo";
+import { FarmLocationPicker, type FarmLocationValue } from "@/components/common/FarmLocationPicker";
 import { ErrorState } from "@/components/common/StateFeedback";
 import { useAuth } from "@/context/AuthContext";
 import { SUPPORTED_LANGUAGES, useLanguage } from "@/context/LanguageContext";
@@ -24,43 +25,26 @@ export const AuthPage: React.FC = () => {
   const [fullName, setFullName] = useState("");
   const [mobile, setMobile] = useState("");
   const [email, setEmail] = useState("");
-  const [stateName, setStateName] = useState("Karnataka");
-  const [district, setDistrict] = useState("");
-  const [village, setVillage] = useState("");
+  const [location, setLocation] = useState<FarmLocationValue>({
+    state: "Karnataka",
+    district: "",
+    taluk: "",
+    village: "",
+    location_address: null,
+    latitude: null,
+    longitude: null,
+    gps_consent: false,
+    continuous_gps_opt_in: false,
+    location_source: "manual",
+  });
   const [farmSize, setFarmSize] = useState("2.5");
   const [soilType, setSoilType] = useState("");
   const [mainCropsText, setMainCropsText] = useState("Ragi, Tomato");
   const [preferredLanguage, setPreferredLanguage] = useState<LanguageCode>("kn-IN");
   const [farmerCategory, setFarmerCategory] = useState("small");
-  const [gpsConsent, setGpsConsent] = useState(false);
-  const [latitude, setLatitude] = useState<number | null>(null);
-  const [longitude, setLongitude] = useState<number | null>(null);
-  const [gpsStatus, setGpsStatus] = useState<string>("");
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const handleRequestGps = () => {
-    if (!gpsConsent) {
-      setError("Please enable the explicit GPS permission checkbox before capturing device location.");
-      return;
-    }
-    if (!navigator.geolocation) {
-      setGpsStatus("Browser geolocation is not supported on this device. Please use manual location.");
-      return;
-    }
-    setGpsStatus("Requesting location...");
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLatitude(Number(pos.coords.latitude.toFixed(5)));
-        setLongitude(Number(pos.coords.longitude.toFixed(5)));
-        setGpsStatus("GPS coordinates captured with your consent.");
-      },
-      () => {
-        setGpsStatus("Permission denied or unavailable. Manual state/district/village works normally.");
-      }
-    );
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,12 +64,16 @@ export const AuthPage: React.FC = () => {
           mobile,
           email: email.trim() || null,
           password,
-          state: stateName,
-          district,
-          village,
-          latitude: gpsConsent ? latitude : null,
-          longitude: gpsConsent ? longitude : null,
-          gps_consent: gpsConsent,
+          state: location.state,
+          district: location.district,
+          taluk: location.taluk,
+          village: location.village,
+          location_address: location.location_address || null,
+          location_source: location.gps_consent && location.latitude != null ? location.location_source : "manual",
+          latitude: location.gps_consent ? location.latitude : null,
+          longitude: location.gps_consent ? location.longitude : null,
+          gps_consent: location.gps_consent,
+          continuous_gps_opt_in: location.gps_consent ? location.continuous_gps_opt_in : false,
           farm_size_acres: Number(farmSize) || 1.0,
           soil_type: soilType.trim() || null,
           main_crops: crops,
@@ -104,7 +92,7 @@ export const AuthPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-cream flex flex-col justify-center py-8 px-4 sm:px-6">
-      <div className="max-w-xl w-full mx-auto space-y-6">
+      <div className={`${mode === "register" ? "max-w-3xl" : "max-w-xl"} w-full mx-auto space-y-6`}>
         <div className="flex items-center justify-between">
           <Link to="/">
             <BrandLogo size="md" />
@@ -235,38 +223,12 @@ export const AuthPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-ink mb-1.5">State *</label>
-                    <input
-                      type="text"
-                      required
-                      value={stateName}
-                      onChange={(e) => setStateName(e.target.value)}
-                      className="rm-input"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-ink mb-1.5">District</label>
-                    <input
-                      type="text"
-                      value={district}
-                      onChange={(e) => setDistrict(e.target.value)}
-                      placeholder="e.g. Mandya"
-                      className="rm-input"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-ink mb-1.5">Village</label>
-                    <input
-                      type="text"
-                      value={village}
-                      onChange={(e) => setVillage(e.target.value)}
-                      placeholder="e.g. Maddur"
-                      className="rm-input"
-                    />
-                  </div>
-                </div>
+                <FarmLocationPicker
+                  value={location}
+                  onChange={setLocation}
+                  allowAuthReverse={false}
+                  compactMapHeight="h-44"
+                />
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
@@ -342,47 +304,6 @@ export const AuthPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Opt-in GPS */}
-                <div className="rm-surface p-4 space-y-2.5">
-                  <label className="flex items-start gap-2.5 text-xs text-ink cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={gpsConsent}
-                      onChange={(e) => {
-                        setGpsConsent(e.target.checked);
-                        if (!e.target.checked) {
-                          setLatitude(null);
-                          setLongitude(null);
-                          setGpsStatus("");
-                        }
-                      }}
-                      className="mt-0.5 rounded border-forest text-forest focus:ring-forest"
-                    />
-                    <span>
-                      <strong>Optional GPS Consent:</strong> I consent to sharing my farm GPS
-                      coordinates for hyper-local weather and dataset soil estimates. Manual
-                      village/district entry always works without GPS.
-                    </span>
-                  </label>
-                  {gpsConsent && (
-                    <div className="flex flex-wrap items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={handleRequestGps}
-                        className="rm-btn-secondary text-xs py-1.5 px-3"
-                      >
-                        <MapPin className="h-3.5 w-3.5" />
-                        Capture GPS Coordinates
-                      </button>
-                      {latitude !== null && longitude !== null && (
-                        <span className="text-xs font-medium text-forest">
-                          Lat {latitude}, Lon {longitude}
-                        </span>
-                      )}
-                      {gpsStatus && <span className="text-xs text-muted">{gpsStatus}</span>}
-                    </div>
-                  )}
-                </div>
               </>
             )}
 

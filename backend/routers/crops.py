@@ -2,7 +2,7 @@
 
 from typing import List
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, File, UploadFile, status
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -20,7 +20,9 @@ from services.crop_service import (
     list_tracked_crops,
     recommend_crops_for_farmer,
     update_tracked_crop,
+    upload_tracked_crop_photo,
 )
+from utils.rate_limit import rate_limit
 from utils.security import get_current_farmer
 
 
@@ -61,6 +63,20 @@ def edit_monitoring_crop(
     db: Session = Depends(get_db),
 ):
     return update_tracked_crop(db, current_farmer.id, crop_id, payload)
+
+
+@router.post(
+    "/monitoring/{crop_id}/photo",
+    response_model=TrackedCropOut,
+    dependencies=[Depends(rate_limit(max_requests=20, window_seconds=60))],
+)
+async def add_monitoring_crop_photo(
+    crop_id: int,
+    file: UploadFile = File(...),
+    current_farmer: Farmer = Depends(get_current_farmer),
+    db: Session = Depends(get_db),
+):
+    return await upload_tracked_crop_photo(db, current_farmer, crop_id, file)
 
 
 @router.delete("/monitoring/{crop_id}", status_code=status.HTTP_204_NO_CONTENT)
