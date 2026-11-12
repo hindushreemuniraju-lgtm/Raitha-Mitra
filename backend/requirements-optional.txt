@@ -1,0 +1,8 @@
+# Optional LiveKit Agents + Sarvam worker dependencies (recommended Python 3.10-3.13 or compatible wheels)
+livekit-agents[sarvam]>=1.8.6,<2
+python-dotenv>=1.0.1
+# Optional local OCR & GeoTIFF packages
+# rapidocr-onnxruntime>=1.3.0
+# pytesseract>=0.3.13
+# rasterio>=1.4.0
+# psycopg[binary]>=3.2.0

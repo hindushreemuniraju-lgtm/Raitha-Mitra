@@ -1,0 +1,30 @@
+# Python / Backend
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+*.db
+*.sqlite
+*.sqlite3
+backend/.env
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Node / Frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.env
+frontend/.env.local
+*.tsbuildinfo
+
+# Logs & OS
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.vercel/
