@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { Bell, CheckCheck, RefreshCw, Volume2 } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Bell, CheckCheck, CloudRain, RefreshCw, Sprout, Volume2 } from "lucide-react";
 import { api } from "@/services/api";
 import type { NotificationItem, NotificationList } from "@/types";
 
@@ -11,6 +11,7 @@ interface NotificationBellProps {
 }
 
 export function NotificationBell({ preferredLanguage = "kn-IN" }: NotificationBellProps) {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -234,9 +235,49 @@ export function NotificationBell({ preferredLanguage = "kn-IN" }: NotificationBe
                     <p className="text-xs text-[#718071] leading-relaxed">
                       {isKn ? item.message_kn : item.message_en}
                     </p>
+                    {(item.crop_name || item.growth_stage || item.recommendation_en) && (
+                      <div className="rounded-lg bg-[#EDF5E9]/70 px-2.5 py-1.5 text-[11px] text-[#202820] space-y-0.5">
+                        {item.crop_name && (
+                          <p>
+                            <strong>Crop:</strong> {item.crop_name}
+                            {item.growth_stage ? ` • Stage: ${item.growth_stage}` : ""}
+                          </p>
+                        )}
+                        {(isKn ? item.recommendation_kn : item.recommendation_en) && (
+                          <p>
+                            <strong>Action:</strong>{" "}
+                            {isKn ? item.recommendation_kn || item.recommendation_en : item.recommendation_en}
+                          </p>
+                        )}
+                      </div>
+                    )}
                     {isKn && item.title_en && (
                       <p className="text-[11px] text-[#718071]/80 italic">{item.title_en}</p>
                     )}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpen(false);
+                          navigate("/weather");
+                        }}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-[#DCE8D8] bg-white hover:bg-[#EDF5E9] text-[10px] font-semibold text-[#176B35]"
+                      >
+                        <CloudRain className="w-3 h-3" /> View Weather
+                      </button>
+                      {(item.crop_id || item.crop_name || item.category === "harvest_reminder") && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpen(false);
+                            navigate(item.category === "harvest_reminder" ? "/harvest" : "/growth");
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-[#DCE8D8] bg-white hover:bg-[#EDF5E9] text-[10px] font-semibold text-[#176B35]"
+                        >
+                          <Sprout className="w-3 h-3" /> View Crop
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })

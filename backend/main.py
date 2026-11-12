@@ -75,7 +75,7 @@ async def lifespan(_app: FastAPI):
     if settings.APP_ENV == "development" or settings.DATABASE_URL.startswith("sqlite"):
         Base.metadata.create_all(bind=engine)
     task = None
-    if settings.MONITORING_SCHEDULER_ENABLED:
+    if settings.MONITORING_SCHEDULER_ENABLED and settings.APP_ENV != "testing":
         task = asyncio.create_task(_monitoring_worker())
     try:
         yield

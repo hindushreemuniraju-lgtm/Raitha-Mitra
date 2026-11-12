@@ -95,7 +95,7 @@ class Settings(BaseSettings):
     NOMINATIM_USER_AGENT: str = "RaithaMitra/1.0 (contact@raithamitra.app)"
     KSNDMC_FLOOD_API_URL: str = ""
     KSNDMC_API_KEY: str = ""
-    MONITORING_SCHEDULER_ENABLED: bool = False
+    MONITORING_SCHEDULER_ENABLED: bool = not _IS_VERCEL
     MONITORING_INTERVAL_SECONDS: int = 1800
     CRON_SECRET: str = ""
 

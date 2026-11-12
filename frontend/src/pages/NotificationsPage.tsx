@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Bell, CheckCheck, RefreshCw, ShieldCheck, Volume2 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Bell, CheckCheck, CloudRain, RefreshCw, ShieldCheck, Sprout, Volume2 } from "lucide-react";
 import { CardSkeleton, EmptyState, ErrorState, SuccessBanner } from "@/components/common/StateFeedback";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
@@ -198,9 +199,53 @@ export const NotificationsPage: React.FC = () => {
               </div>
               <p className="text-xs text-deep leading-relaxed">{n.message_kn}</p>
               <p className="text-xs text-muted leading-relaxed">{n.message_en}</p>
-              <p className="text-[11px] text-muted pt-1">
-                Source: {n.source_name} • {new Date(n.created_at).toLocaleString()}
-              </p>
+
+              {(n.crop_name || n.growth_stage || n.recommendation_en || n.recommendation_kn) && (
+                <div className="rounded-xl bg-[#EDF5E9]/70 border border-[#CFE4C8] p-3 text-xs space-y-1">
+                  {n.crop_name && (
+                    <p className="text-deep">
+                      <strong>Crop:</strong> {n.crop_name}
+                      {n.growth_stage ? ` • Growth stage: ${n.growth_stage}` : ""}
+                    </p>
+                  )}
+                  {(n.recommendation_kn || n.recommendation_en) && (
+                    <p className="text-ink">
+                      <strong>Recommendation:</strong> {isKn ? n.recommendation_kn || n.recommendation_en : n.recommendation_en}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                <p className="text-[11px] text-muted">
+                  Source: {n.source_name} • {new Date(n.created_at).toLocaleString()}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link
+                    to="/weather"
+                    className="rm-btn-secondary !py-1.5 !px-3 text-xs inline-flex items-center gap-1"
+                  >
+                    <CloudRain className="h-3.5 w-3.5" />
+                    View Weather
+                  </Link>
+                  <Link
+                    to={n.category === "harvest_reminder" ? "/harvest" : "/growth"}
+                    className="rm-btn-secondary !py-1.5 !px-3 text-xs inline-flex items-center gap-1"
+                  >
+                    <Sprout className="h-3.5 w-3.5" />
+                    View Crop
+                  </Link>
+                  {!n.is_read && (
+                    <button
+                      type="button"
+                      onClick={() => void handleMarkRead(n.id)}
+                      className="rm-btn-primary !py-1.5 !px-3 text-xs"
+                    >
+                      Mark as Read
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           ))}
         </div>

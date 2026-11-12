@@ -8,7 +8,7 @@ import {
   CartesianGrid,
   Tooltip,
 } from "recharts";
-import { CloudRain, AlertTriangle, Waves, RefreshCw } from "lucide-react";
+import { CloudRain, AlertTriangle, LocateFixed, Waves, RefreshCw } from "lucide-react";
 import {
   CardSkeleton,
   EmptyState,
@@ -17,24 +17,60 @@ import {
 } from "@/components/common/StateFeedback";
 import { useAuth } from "@/context/AuthContext";
 import { useAsyncState } from "@/hooks/useAsyncState";
+import { useLiveGps } from "@/hooks/useLiveGps";
 import { api } from "@/services/api";
 import type { WeatherFloodResponse } from "@/types";
 
 export const WeatherPage: React.FC = () => {
-  const { farmer } = useAuth();
+  const { farmer, refreshProfile } = useAuth();
   const [stateInput, setStateInput] = useState(farmer?.state || "Karnataka");
   const [districtInput, setDistrictInput] = useState(farmer?.district || "");
   const { data, loading, error, run } = useAsyncState<WeatherFloodResponse>();
+  const { detecting: detectingGps, error: gpsError, detectOnce } = useLiveGps();
 
-  const loadWeather = () => {
+  const loadWeather = (override?: { state?: string; district?: string; lat?: number; lon?: number }) => {
     void run(() =>
       api.getWeather({
-        state: stateInput,
-        district: districtInput,
-        lat: farmer?.gps_consent && farmer.latitude ? farmer.latitude : undefined,
-        lon: farmer?.gps_consent && farmer.longitude ? farmer.longitude : undefined,
+        state: override?.state ?? stateInput,
+        district: override?.district ?? districtInput,
+        lat: override?.lat ?? (farmer?.gps_consent && farmer.latitude ? farmer.latitude : undefined),
+        lon: override?.lon ?? (farmer?.gps_consent && farmer.longitude ? farmer.longitude : undefined),
       })
     );
+  };
+
+  const handleUseLiveGps = async () => {
+    const detected = await detectOnce(true);
+    if (!detected) return;
+    const nextState = detected.geocoded?.state || stateInput || "Karnataka";
+    const nextDistrict = detected.geocoded?.district || districtInput || "";
+    const nextTaluk = detected.geocoded?.taluk || farmer?.taluk || "";
+    const nextVillage = detected.geocoded?.village || farmer?.village || "";
+    setStateInput(nextState);
+    setDistrictInput(nextDistrict);
+    try {
+      await api.verifyLocation({
+        latitude: detected.latitude,
+        longitude: detected.longitude,
+        gps_consent: true,
+        continuous_gps_opt_in: Boolean(farmer?.continuous_gps_opt_in),
+        state: nextState,
+        district: nextDistrict,
+        taluk: nextTaluk,
+        village: nextVillage,
+        location_address: detected.geocoded?.display_name || null,
+        location_source: "gps",
+      });
+      await refreshProfile();
+    } catch {
+      // Even if saving profile hits an issue, still load weather for live coordinates
+    }
+    loadWeather({
+      state: nextState,
+      district: nextDistrict,
+      lat: detected.latitude,
+      lon: detected.longitude,
+    });
   };
 
   useEffect(() => {
@@ -75,8 +111,20 @@ export const WeatherPage: React.FC = () => {
             <RefreshCw className="h-4 w-4" />
             Check
           </button>
+          <button
+            type="button"
+            onClick={() => void handleUseLiveGps()}
+            disabled={detectingGps}
+            className="rm-btn-secondary"
+            title="Detect and refresh device GPS location for local forecast"
+          >
+            <LocateFixed className={`h-4 w-4 text-forest ${detectingGps ? "animate-spin" : ""}`} />
+            {detectingGps ? "Detecting GPS..." : "Use Live GPS"}
+          </button>
         </form>
       </div>
+
+      {gpsError && <ErrorState message={gpsError} />}
 
       {loading && !data ? (
         <div className="space-y-4">
@@ -198,6 +246,24 @@ export const WeatherPage: React.FC = () => {
                     className="font-semibold text-forest underline"
                   >
                     ffs.india-water.gov.in
+                  </a>
+                </div>
+              )}
+
+              {data.ksndmc_status && (
+                <div className="rounded-xl border border-[#176B35]/15 bg-[#FAF9F2] p-3 text-xs space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-deep">KSNDMC Karnataka Disaster & Reservoir Watch</span>
+                    <IntegrationStatusBadge status={data.ksndmc_status} />
+                  </div>
+                  <p className="text-muted">{data.ksndmc_source_note}</p>
+                  <a
+                    href="https://ksndmc.karnataka.gov.in"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-semibold text-forest underline inline-block"
+                  >
+                    ksndmc.karnataka.gov.in
                   </a>
                 </div>
               )}

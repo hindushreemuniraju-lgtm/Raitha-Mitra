@@ -80,6 +80,40 @@ export const VoiceAssistantPage: React.FC = () => {
     stopAssistantAudioImmediately();
   };
 
+  const handlePlayFarmBriefing = async () => {
+    stopAssistantAudioImmediately();
+    setError(null);
+    setLoading(true);
+    try {
+      const prompt =
+        selectedLang === "kn-IN"
+          ? "ನಮಸ್ಕಾರ! ನಾಳೆ ಮಳೆ ಸಾಧ್ಯತೆ, ಪ್ರವಾಹ ಎಚ್ಚರಿಕೆ ಮತ್ತು ನನ್ನ ಬೆಳೆ ಕೊಯ್ಲು ಮುನ್ನೆಚ್ಚರಿಕೆಗಳ ಬಗ್ಗೆ ತಿಳಿಸಿ."
+          : "Hello! Give me today's weather, flood status, and crop harvest protection briefing for my farm.";
+      const res = await api.sendVoiceTextTurn({
+        text: prompt,
+        language_code: selectedLang,
+        session_id: sessionId,
+      });
+      setSessionId(res.session_id);
+      setMessages(res.messages);
+      if (res.audio_base64) {
+        playReplyAudio(res.audio_base64, res.audio_mime);
+      } else if (!muted && typeof window !== "undefined" && "speechSynthesis" in window) {
+        const prefix = selectedLang === "kn-IN" ? "ನಮಸ್ಕಾರ ರೈತರೆ! " : "";
+        const utter = new SpeechSynthesisUtterance(`${prefix}${res.reply_text}`);
+        utter.lang = selectedLang || "kn-IN";
+        setSpeaking(true);
+        utter.onend = () => setSpeaking(false);
+        utter.onerror = () => setSpeaking(false);
+        window.speechSynthesis.speak(utter);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not generate farm voice briefing");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const playReplyAudio = (audioBase64?: string | null, audioMime?: string | null) => {
     stopAssistantAudioImmediately();
     if (!audioBase64 || muted) return;
@@ -330,6 +364,16 @@ export const VoiceAssistantPage: React.FC = () => {
               Connect LiveKit Room
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={() => void handlePlayFarmBriefing()}
+            disabled={loading}
+            className="rm-btn-secondary"
+          >
+            <Volume2 className="h-4 w-4 text-forest" />
+            {selectedLang === "kn-IN" ? "ಕನ್ನಡ ಹವಾಮಾನ & ಕೊಯ್ಲು ವರದಿ ಕೇಳಿ" : "Speak Farm Weather & Harvest Alert"}
+          </button>
         </div>
       </div>
 
